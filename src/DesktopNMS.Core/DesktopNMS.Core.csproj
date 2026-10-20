@@ -1,10 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- net9.0 for the desktop app, net10.0 for DashyNMS Mobile and the MCP server. -->
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <RootNamespace>DesktopNMS.Core</RootNamespace>
     <AssemblyName>DesktopNMS.Core</AssemblyName>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <PackageId>DesktopNMS.Core</PackageId>
+    <Description>Shared LibreNMS client, models and logic for the DashyNMS apps and MCP server.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/DashyNMS/core</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/DashyNMS/core</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +26,10 @@
        sources itself (mobile's DesktopNMS.Core.Portable) needs the same item. -->
   <ItemGroup>
     <EmbeddedResource Include="Licences\Texts\*.txt" LogicalName="DesktopNMS.Core.Licences.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- So request bodies built by the internal resource APIs can be checked

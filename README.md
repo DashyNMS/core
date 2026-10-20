@@ -1,0 +1,45 @@
+# DashyNMS Core
+
+The shared code behind the DashyNMS desktop app, DashyNMS Mobile and the DashyNMS MCP server:
+- a LibreNMS API client, with Graylog and Unimus clients;
+- the models;
+- alert counting, history and notification rules;
+- graph styling and legends;
+- sign-in helpers;
+- the other logic every app needs to agree on.
+
+It's plain .NET with no UI, targeting `net9.0` and `net10.0`, and is published as the `DesktopNMS.Core` NuGet package on GitHub Packages.
+
+## Using the package
+
+Add the GitHub Packages feed to `nuget.config`:
+
+```xml
+<packageSources>
+  <add key="dashynms" value="https://nuget.pkg.github.com/DashyNMS/index.json" />
+</packageSources>
+```
+
+GitHub Packages needs a login even for public packages. Use a token with `read:packages` (for example `gh auth refresh -s read:packages`, then `gh auth token`), or `GITHUB_TOKEN` in GitHub Actions with `packages: read`.
+
+## Building
+
+```bash
+dotnet test DashyNMS.Core.sln
+```
+
+Needs the .NET 9 and .NET 10 SDKs. CI runs the tests on Windows, macOS and Linux. A test that only holds on one platform is marked `[WindowsFact]` / `[NotWindowsFact]`.
+
+## Releasing
+
+Push a tag `v1.2.3`. The release workflow tests, packs that version and publishes it to GitHub Packages. Versions follow semver: a breaking change to the public API, or to anything persisted in settings, is a major bump.
+
+## History
+
+Core moved here from [DashyNMS/desktop](https://github.com/DashyNMS/desktop) in October 2026 (desktop#248), with its history. Issue numbers in older comments and commits (`#169`, `#266`…) refer to DashyNMS/desktop.
+
+The assembly and namespaces are still `DesktopNMS.Core`. A rename to `DashyNMS.Core` is a separate, later change.
+
+## Licence
+
+[MIT](LICENSE).
