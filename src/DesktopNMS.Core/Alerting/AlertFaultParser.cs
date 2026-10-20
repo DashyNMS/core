@@ -17,8 +17,15 @@ namespace DesktopNMS.Core.Alerting;
 public static class AlertFaultParser
 {
     public static AlertDetail Parse(AlertLogEntry? entry, IReadOnlySet<string>? ruleFields = null)
+        => Parse(entry?.Details, entry?.TimeLogged, ruleFields);
+
+    /// <summary>
+    /// The same, from a details blob of that shape on its own - a LibreNMS
+    /// 26.10 fault's own <see cref="Alert.Details"/> (#4, #7).
+    /// </summary>
+    public static AlertDetail Parse(JsonElement? detailsBlob, DateTime? recordedAt, IReadOnlySet<string>? ruleFields = null)
     {
-        if (entry?.Details is not { ValueKind: JsonValueKind.Object } details)
+        if (detailsBlob is not { ValueKind: JsonValueKind.Object } details)
         {
             return AlertDetail.Empty;
         }
@@ -36,7 +43,7 @@ public static class AlertFaultParser
             resolved = ParseRows(diff, "resolved", fields);
         }
 
-        return new AlertDetail(faults, added, resolved, entry.TimeLogged, fields.Count > 0);
+        return new AlertDetail(faults, added, resolved, recordedAt, fields.Count > 0);
     }
 
     private static IReadOnlyList<AlertFault> ParseRows(
