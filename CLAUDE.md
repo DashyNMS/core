@@ -1,6 +1,6 @@
 # DashyNMS Core
 
-Shared, UI-free .NET code for the DashyNMS desktop app, DashyNMS Mobile and the MCP server. It targets `net9.0` and `net10.0` and is published as the `DesktopNMS.Core` package on GitHub Packages (see README.md).
+Shared, UI-free .NET code for the DashyNMS desktop app, DashyNMS Mobile and the MCP server. It targets `net9.0` and `net10.0` and is published as the `DashyNMS.Core` package on GitHub Packages (see README.md).
 
 - Every change is a consumer-facing API change. Say in the PR what desktop, mobile and MCP need to do, and bump the version accordingly (semver; a breaking change is a major bump).
 - Tests must pass on Windows, macOS and Linux. Mark platform-specific tests with `[WindowsFact]` / `[NotWindowsFact]`.

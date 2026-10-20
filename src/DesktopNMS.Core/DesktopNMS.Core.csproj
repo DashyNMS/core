@@ -7,7 +7,7 @@
     <AssemblyName>DesktopNMS.Core</AssemblyName>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
 
-    <PackageId>DesktopNMS.Core</PackageId>
+    <PackageId>DashyNMS.Core</PackageId>
     <Description>Shared LibreNMS client, models and logic for the DashyNMS apps and MCP server.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/DashyNMS/core</PackageProjectUrl>

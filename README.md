@@ -8,7 +8,7 @@ The shared code behind the DashyNMS desktop app, DashyNMS Mobile and the DashyNM
 - sign-in helpers;
 - the other logic every app needs to agree on.
 
-It's plain .NET with no UI, targeting `net9.0` and `net10.0`, and is published as the `DesktopNMS.Core` NuGet package on GitHub Packages.
+It's plain .NET with no UI, targeting `net9.0` and `net10.0`, and is published as the `DashyNMS.Core` NuGet package on GitHub Packages.
 
 ## Using the package
 
@@ -38,7 +38,7 @@ Push a tag `v1.2.3`. The release workflow tests, packs that version and publishe
 
 Core moved here from [DashyNMS/desktop](https://github.com/DashyNMS/desktop) in October 2026 (desktop#248), with its history. Issue numbers in older comments and commits (`#169`, `#266`…) refer to DashyNMS/desktop.
 
-The assembly and namespaces are still `DesktopNMS.Core`. A rename to `DashyNMS.Core` is a separate, later change.
+The package is `DashyNMS.Core`, but the assembly and namespaces are still `DesktopNMS.Core`. Renaming those is a separate, later breaking change.
 
 ## Licence
 

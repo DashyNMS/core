@@ -1,6 +1,6 @@
 name: Release
 
-# A tag v1.2.3 tests, packs and publishes DesktopNMS.Core 1.2.3 to GitHub Packages.
+# A tag v1.2.3 tests, packs and publishes DashyNMS.Core 1.2.3 to GitHub Packages.
 on:
   push:
     tags: ["v*"]
