@@ -40,6 +40,9 @@ internal sealed class AlertsApi : IAlertsApi
             {
                 await _transport.GetCollectionAsync<Alert>(ProbeUrl, "alerts", cancellationToken).ConfigureAwait(false);
                 source = AlertSource.Fault;
+
+                // /faults only exists from 26.10.0, which checks permissions per resource (#9).
+                _transport.Permissions?.NoteServerVersion(ApiPermissions.PerResourceChecksSince);
             }
             catch (LibreNmsApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
@@ -842,7 +845,9 @@ internal sealed class SystemApi : ISystemApi
         var entries = await _transport.GetCollectionAsync<SystemInfo>("system", "system", cancellationToken)
             .ConfigureAwait(false);
 
-        return entries.Count > 0 ? entries[0] : new SystemInfo();
+        var info = entries.Count > 0 ? entries[0] : new SystemInfo();
+        _transport.Permissions?.NoteServerVersion(Alerting.LibreNmsVersion.Parse(info.LocalVersion));
+        return info;
     }
 }
 
@@ -971,7 +976,7 @@ internal sealed class GraphsApi : IGraphsApi
         return graphs;
     }
 
-    public Task<string> GetSvgAsync(
+    public async Task<string> GetSvgAsync(
         int deviceId,
         string graphName,
         GraphTimeRange range,
@@ -995,10 +1000,12 @@ internal sealed class GraphsApi : IGraphsApi
             url += "&legend=no";
         }
 
-        return _transport.SendRawAsync(url, cancellationToken);
+        var svg = await _transport.SendRawAsync(url, cancellationToken).ConfigureAwait(false);
+        GraphImages.ThrowIfDenied(svg);
+        return svg;
     }
 
-    public Task<string> GetPortSvgAsync(
+    public async Task<string> GetPortSvgAsync(
         int deviceId,
         string ifName,
         string graphType,
@@ -1024,10 +1031,12 @@ internal sealed class GraphsApi : IGraphsApi
             url += "&to=" + Uri.EscapeDataString(to);
         }
 
-        return _transport.SendRawAsync(url, cancellationToken);
+        var svg = await _transport.SendRawAsync(url, cancellationToken).ConfigureAwait(false);
+        GraphImages.ThrowIfDenied(svg);
+        return svg;
     }
 
-    public Task<string> GetSensorSvgAsync(
+    public async Task<string> GetSensorSvgAsync(
         int deviceId,
         string graphName,
         int sensorId,
@@ -1052,7 +1061,9 @@ internal sealed class GraphsApi : IGraphsApi
             url += "&legend=no";
         }
 
-        return _transport.SendRawAsync(url, cancellationToken);
+        var svg = await _transport.SendRawAsync(url, cancellationToken).ConfigureAwait(false);
+        GraphImages.ThrowIfDenied(svg);
+        return svg;
     }
 }
 

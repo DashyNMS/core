@@ -99,12 +99,58 @@ public sealed class ApiPermissions
     private readonly object _sync = new();
     private readonly HashSet<ApiPermission> _refused = new();
 
+    // Refused for one item only - LibreNMS 26.10's per-resource checks (#9).
+    private readonly HashSet<(ApiPermission Permission, string Resource)> _refusedItems = new();
+
     // Refused by LibreNMS's API's crashed check rather than the token (#294).
     private readonly HashSet<ApiPermission> _adminOnly = new();
+
+    private Version? _serverVersion;
+
+    /// <summary>
+    /// The server's LibreNMS version, once known - from /system, or implied by
+    /// the /faults route (26.10+). Decides whether a bare 500 on an
+    /// acknowledgement can be LibreNMS's crashed permission check (#294),
+    /// which 26.10.0 fixed (#9). Cleared with <see cref="Forget"/>.
+    /// </summary>
+    public Version? ServerVersion
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _serverVersion;
+            }
+        }
+    }
+
+    /// <summary>Records the server's version - the highest seen since the last <see cref="Forget"/>.</summary>
+    public void NoteServerVersion(Version? version)
+    {
+        if (version is null)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            if (_serverVersion is null || version > _serverVersion)
+            {
+                _serverVersion = version;
+            }
+        }
+    }
+
+    /// <summary>LibreNMS 26.10.0 checks permissions per alert, device, group and location, and no longer crashes for non-admins.</summary>
+    public bool HasPerResourceChecks => ServerVersion is { } version && version >= PerResourceChecksSince;
+
+    /// <summary>LibreNMS 26.10.0 (librenms#20913, #20918, #20909).</summary>
+    public static Version PerResourceChecksSince { get; } = new(26, 10, 0);
 
     /// <summary>Raised, on whichever thread made the request, when a permission is first refused or the list is forgotten.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>Whether the token can't do this anywhere - for turning a button off everywhere.</summary>
     public bool IsRefused(ApiPermission permission)
     {
         lock (_sync)
@@ -112,6 +158,28 @@ public sealed class ApiPermissions
             return _refused.Contains(permission);
         }
     }
+
+    /// <summary>
+    /// Whether this one request would be refused: the permission refused
+    /// everywhere, or for this item (#9) - one device the account can't
+    /// touch doesn't turn the action off for every other.
+    /// </summary>
+    public bool IsRefusedFor(HttpMethod method, string relativeUrl)
+    {
+        if (For(method, relativeUrl) is not { } permission)
+        {
+            return false;
+        }
+
+        lock (_sync)
+        {
+            return _refused.Contains(permission) || _refusedItems.Contains((permission, ResourceOf(relativeUrl)));
+        }
+    }
+
+    /// <summary>Whether acknowledging or unmuting this alert or fault was refused, everywhere or for it alone.</summary>
+    public bool IsAcknowledgeRefused(Models.AlertKey alert)
+        => IsRefusedFor(HttpMethod.Put, (alert.Source == Models.AlertSource.Fault ? "faults/" : "alerts/") + alert.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     /// <summary>
     /// Remembers the permission behind a request that came back 403.
@@ -132,7 +200,13 @@ public sealed class ApiPermissions
                 _adminOnly.Add(permission);
             }
 
-            if (!_refused.Add(permission))
+            // LibreNMS 26.10's handlers refuse one item ("Insufficient
+            // permissions to update this alert") after the route let the
+            // type through; that's about the item, not the token.
+            var added = IsItemRefusal(exception)
+                ? _refusedItems.Add((permission, ResourceOf(relativeUrl)))
+                : _refused.Add(permission);
+            if (!added)
             {
                 return false;
             }
@@ -159,12 +233,14 @@ public sealed class ApiPermissions
     {
         lock (_sync)
         {
-            if (_refused.Count == 0)
+            _serverVersion = null;
+            if (_refused.Count == 0 && _refusedItems.Count == 0)
             {
                 return;
             }
 
             _refused.Clear();
+            _refusedItems.Clear();
             _adminOnly.Clear();
         }
 
@@ -184,6 +260,30 @@ public sealed class ApiPermissions
            && string.Equals(exception.ServerMessage?.Trim(), "Server Error", StringComparison.Ordinal)
            && For(method, relativeUrl) is { } permission
            && CheckCrashesForNonAdmins.Contains(permission);
+
+    /// <summary>
+    /// <see cref="IsCrashedPermissionCheck(HttpMethod, string, LibreNmsApiException)"/>,
+    /// but only on a server that can still have that bug: LibreNMS 26.10.0
+    /// fixed it (#9), so there a 500 is just a failure, never "only admins can".
+    /// An unknown version keeps the old handling.
+    /// </summary>
+    public bool IsCrashedPermissionCheckOnThisServer(HttpMethod method, string relativeUrl, LibreNmsApiException exception)
+        => !HasPerResourceChecks && IsCrashedPermissionCheck(method, relativeUrl, exception);
+
+    /// <summary>A 403 from a 26.10 handler's own check on one item, rather than the route's check on the type.</summary>
+    public static bool IsItemRefusal(LibreNmsApiException exception)
+        => exception.ServerMessage is { } message
+           && message.StartsWith("Insufficient permissions to ", StringComparison.OrdinalIgnoreCase)
+           && (message.Contains(" this ", StringComparison.OrdinalIgnoreCase) || message.Contains(" the target ", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The item a write is about - its path without the query, "faults/9001". Unmuting is about the same alert as acknowledging it.</summary>
+    public static string ResourceOf(string relativeUrl)
+    {
+        var path = relativeUrl.Split('?', 2)[0].Trim('/').ToLowerInvariant();
+        return path.StartsWith("alerts/unmute/", StringComparison.Ordinal) || path.StartsWith("faults/unmute/", StringComparison.Ordinal)
+            ? path.Replace("/unmute/", "/", StringComparison.Ordinal)
+            : path;
+    }
 
     /// <summary>The permission a write request needs, or null for a read or a route not listed.</summary>
     public static ApiPermission? For(HttpMethod method, string relativeUrl)
