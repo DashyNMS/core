@@ -103,8 +103,8 @@ public class AlertFaultsTests
     [Fact]
     public async Task The_alert_log_carries_fault_ids_from_26_10()
     {
-        var legacy = await FixtureTransport.Read<AlertLogEntry>("26.9.1.1/alertlog.json", "logs");
-        var current = await FixtureTransport.Read<AlertLogEntry>("26.10.0/alertlog.json", "logs");
+        var legacy = await LibreNmsFixtures.Read<AlertLogEntry>("26.9.1.1/alertlog.json", "logs");
+        var current = await LibreNmsFixtures.Read<AlertLogEntry>("26.10.0/alertlog.json", "logs");
 
         Assert.Null(Assert.Single(legacy).FaultId);
         Assert.Equal(new int?[] { 9002, 9001, null }, current.Select(e => e.FaultId));
@@ -170,12 +170,6 @@ public class AlertFaultsTests
 
         public void Reconnect() => Connection = new LibreNmsConnection(new Uri("https://nms.example.net/"), "token");
 
-        public static async Task<IReadOnlyList<T>> Read<T>(string file, string property)
-        {
-            using var document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "LibreNMS", file)));
-            return document.RootElement.GetProperty(property).Deserialize<List<T>>(LibreNmsJson.Options)!;
-        }
-
         public async Task<IReadOnlyList<T>> GetCollectionAsync<T>(string relativeUrl, string collectionProperty, CancellationToken cancellationToken = default)
         {
             Requests.Add(relativeUrl);
@@ -190,7 +184,7 @@ public class AlertFaultsTests
                 throw new InvalidOperationException("No fixture for " + relativeUrl);
             }
 
-            return route.File is null ? Array.Empty<T>() : await Read<T>(route.File, collectionProperty);
+            return route.File is null ? Array.Empty<T>() : await LibreNmsFixtures.Read<T>(route.File, collectionProperty);
         }
 
         public Task<JsonDocument> SendAsync(HttpMethod method, string relativeUrl, object? body = null, CancellationToken cancellationToken = default)

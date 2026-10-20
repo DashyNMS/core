@@ -71,4 +71,52 @@ public static class AlertCounting
 
         return new AlertCount(total, critical, warning);
     }
+
+    /// <summary>
+    /// Whether a device/rule group counts (#4): once, if any of its faults
+    /// would - so eight busy cores are one alert on the badge, and a new
+    /// fault beside acknowledged ones still counts.
+    /// </summary>
+    public static bool Counts(AlertGroup group, AlertSeverity minimum, bool includeAcknowledged)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        return group.Faults.Any(f => Counts(f, minimum, includeAcknowledged));
+    }
+
+    /// <summary>
+    /// What badges and dashboard totals count (#4): device/rule groups, each
+    /// once, critical or warning by the worst of its faults that counts. On a
+    /// server before LibreNMS 26.10 every group is one alert, so this equals
+    /// <see cref="Count"/>.
+    /// </summary>
+    public static AlertCount CountGroups(IEnumerable<AlertGroup> groups, AlertSeverity minimum, bool includeAcknowledged)
+    {
+        ArgumentNullException.ThrowIfNull(groups);
+
+        int total = 0, critical = 0, warning = 0;
+        foreach (var group in groups)
+        {
+            var counting = group.Faults.Where(f => Counts(f, minimum, includeAcknowledged)).ToList();
+            if (counting.Count == 0)
+            {
+                continue;
+            }
+
+            total++;
+            if (counting.Any(f => f.Severity == AlertSeverity.Critical))
+            {
+                critical++;
+            }
+            else if (counting.Any(f => f.Severity == AlertSeverity.Warning))
+            {
+                warning++;
+            }
+        }
+
+        return new AlertCount(total, critical, warning);
+    }
+
+    /// <summary><see cref="CountGroups(IEnumerable{AlertGroup}, AlertSeverity, bool)"/> straight from a list of alerts or faults.</summary>
+    public static AlertCount CountGroups(IEnumerable<Alert> alerts, AlertSeverity minimum, bool includeAcknowledged)
+        => CountGroups(AlertGrouping.ByDeviceAndRule(alerts), minimum, includeAcknowledged);
 }
