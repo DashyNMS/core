@@ -51,6 +51,18 @@ public sealed class AlertRule
     [JsonPropertyName("invert_map")]
     public bool InvertMap { get; set; }
 
+    /// <summary>
+    /// LibreNMS 26.10+: notify, acknowledge and unmute each fault on its own
+    /// - while a device's open faults stay within <see cref="MaxEntities"/>.
+    /// Null before 26.10. Read-only here; writing it is #11.
+    /// </summary>
+    [JsonPropertyName("notify_per_entity")]
+    public bool? NotifyPerEntity { get; set; }
+
+    /// <summary>The per-entity limit; null inherits the server's own default, which the API doesn't expose.</summary>
+    [JsonPropertyName("max_entities")]
+    public int? MaxEntities { get; set; }
+
     [JsonPropertyName("devices")]
     public List<int> Devices { get; set; } = new();
 
