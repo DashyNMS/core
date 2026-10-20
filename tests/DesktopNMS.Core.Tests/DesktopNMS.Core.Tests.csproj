@@ -13,6 +13,11 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
   </ItemGroup>
 
+  <!-- LibreNMS response fixtures (#10), read from the output folder. -->
+  <ItemGroup>
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\DesktopNMS.Core\DesktopNMS.Core.csproj" />
   </ItemGroup>

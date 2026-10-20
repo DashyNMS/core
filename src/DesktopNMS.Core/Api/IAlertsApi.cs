@@ -2,17 +2,33 @@ using DesktopNMS.Core.Models;
 
 namespace DesktopNMS.Core.Api;
 
-/// <summary>Alert endpoints of the LibreNMS API.</summary>
+/// <summary>
+/// Alert endpoints of the LibreNMS API. On LibreNMS 26.10 and later every call
+/// uses /faults (per-entity faults); on older servers, /alerts. Which one is
+/// worked out once per connection - see <see cref="GetSourceAsync"/> - and
+/// each returned <see cref="Alert"/> says which it is (<see cref="Alert.Source"/>).
+/// </summary>
 public interface IAlertsApi
 {
-    /// <summary>GET /api/v0/alerts</summary>
+    /// <summary>
+    /// Whether this server lists per-entity faults (26.10+) or legacy alerts,
+    /// by asking for an impossible state on /faults (an empty, cheap reply) -
+    /// a 404 means the route doesn't exist yet. Any other failure, a 403
+    /// included, is thrown rather than taken as "legacy", so a denied token
+    /// never quietly falls back to the other endpoint.
+    /// </summary>
+    Task<AlertSource> GetSourceAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>GET /api/v0/faults, or /api/v0/alerts before 26.10.</summary>
     Task<IReadOnlyList<Alert>> ListAsync(AlertQuery? query = null, CancellationToken cancellationToken = default);
 
-    /// <summary>GET /api/v0/alerts/{id}. Returns null when the alert no longer exists.</summary>
+    /// <summary>GET /api/v0/faults/{id} (or alerts/{id}). Returns null when it no longer exists.</summary>
     Task<Alert?> GetAsync(int alertId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// PUT /api/v0/alerts/{id}. Moves the alert to state 2 (acknowledged).
+    /// PUT /api/v0/faults/{id} (or alerts/{id}). Moves it to state 2
+    /// (acknowledged). On 26.10 LibreNMS may acknowledge every open fault for
+    /// the same device and rule - see #6.
     /// </summary>
     /// <param name="note">Appended to the alert's note by the server, with your username and a timestamp.</param>
     /// <param name="untilClear">
@@ -21,7 +37,7 @@ public interface IAlertsApi
     /// </param>
     Task AcknowledgeAsync(int alertId, string? note = null, bool untilClear = true, CancellationToken cancellationToken = default);
 
-    /// <summary>PUT /api/v0/alerts/unmute/{id}. Returns the alert to state 1 (active).</summary>
+    /// <summary>PUT /api/v0/faults/unmute/{id} (or alerts/unmute/{id}). Returns it to state 1 (active).</summary>
     Task UnmuteAsync(int alertId, string? note = null, CancellationToken cancellationToken = default);
 }
 

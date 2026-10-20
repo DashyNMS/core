@@ -1,0 +1,22 @@
+{
+    "status": "ok",
+    "alerts": [
+        {
+            "hostname": "core-sw-01.example.net",
+            "id": 412,
+            "device_id": 7,
+            "rule_id": 3,
+            "state": 1,
+            "alerted": 1,
+            "open": 1,
+            "note": "",
+            "timestamp": "2026-10-19 09:41:00",
+            "info": "{\"until_clear\":true}",
+            "severity": "critical",
+            "name": "Processor usage over 90%",
+            "proc": null,
+            "notes": ""
+        }
+    ],
+    "count": 1
+}

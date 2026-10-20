@@ -50,6 +50,10 @@ public sealed class ApiPermissions
         (HttpMethod.Put, Route("alerts/[^/]+"), ApiPermission.AcknowledgeAlerts),
         (HttpMethod.Put, Route("alerts/unmute/[^/]+"), ApiPermission.AcknowledgeAlerts),
 
+        // The same actions on LibreNMS 26.10's per-entity faults (#3).
+        (HttpMethod.Put, Route("faults/[^/]+"), ApiPermission.AcknowledgeAlerts),
+        (HttpMethod.Put, Route("faults/unmute/[^/]+"), ApiPermission.AcknowledgeAlerts),
+
         (HttpMethod.Post, Route("rules"), ApiPermission.CreateRules),
         (HttpMethod.Put, Route("rules"), ApiPermission.EditRules),
         (HttpMethod.Delete, Route("rules/[^/]+"), ApiPermission.DeleteRules),

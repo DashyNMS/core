@@ -1,0 +1,10 @@
+{
+    "status": "ok",
+    "logs": [
+        { "id": 7702, "rule_id": 3, "device_id": 7, "fault_id": 9002, "state": 1, "time_logged": "2026-10-19 09:41:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null },
+        { "id": 7701, "rule_id": 3, "device_id": 7, "fault_id": 9001, "state": 1, "time_logged": "2026-10-19 09:40:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null },
+        { "id": 5501, "rule_id": 3, "device_id": 7, "fault_id": null, "state": 0, "time_logged": "2026-10-18 22:10:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null }
+    ],
+    "count": 3,
+    "total": "3"
+}
