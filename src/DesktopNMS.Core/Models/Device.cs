@@ -94,9 +94,19 @@ public sealed class Device
     [JsonPropertyName("sysContact")]
     public string? Contact { get; set; }
 
-    /// <summary>Forces <see cref="Contact"/> to win over whatever the device's own sysContact reports, mirroring <see cref="OverrideSysLocation"/>.</summary>
+    /// <summary>
+    /// Forces <see cref="Contact"/> to win over whatever the device's own
+    /// sysContact reports, mirroring <see cref="OverrideSysLocation"/>. Null
+    /// when the server doesn't say: LibreNMS 26.10's device resource
+    /// (librenms#20595) leaves it out, so it's unknown - never "off" - and
+    /// must not be written back from a default (#8). See <see cref="IsSysContactOverrideKnown"/>.
+    /// </summary>
     [JsonPropertyName("override_sysContact")]
-    public bool OverrideSysContact { get; set; }
+    public bool? OverrideSysContact { get; set; }
+
+    /// <summary>Whether <see cref="OverrideSysContact"/> was reported, so it can be shown and edited. When not, point to LibreNMS for that setting.</summary>
+    [JsonIgnore]
+    public bool IsSysContactOverrideKnown => OverrideSysContact is not null;
 
     /// <summary>Excludes this device from fleet-wide up/down availability figures without disabling polling or alerting for it - distinct from <see cref="Ignore"/>.</summary>
     [JsonPropertyName("ignore_status")]
