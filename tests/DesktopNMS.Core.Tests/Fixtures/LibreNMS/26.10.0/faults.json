@@ -1,0 +1,50 @@
+{
+    "status": "ok",
+    "alerts": [
+        {
+            "hostname": "core-sw-01.example.net",
+            "id": 9001,
+            "rule_id": 3,
+            "device_id": 7,
+            "entity_type": "processor",
+            "entity_id": 120,
+            "entity_key": "processor:120",
+            "state": 1,
+            "alerted": 1,
+            "open": 1,
+            "severity": "critical",
+            "note": null,
+            "info": "[]",
+            "details": { "rule": [ { "processor_id": 120, "processor_descr": "CPU 0", "processor_usage": 97 } ] },
+            "first_seen": "2026-10-19 09:40:00",
+            "last_seen": "2026-10-19 09:45:00",
+            "timestamp": "2026-10-19 09:45:00",
+            "name": "Processor usage over 90%",
+            "proc": null,
+            "notes": ""
+        },
+        {
+            "hostname": "core-sw-01.example.net",
+            "id": 9002,
+            "rule_id": 3,
+            "device_id": 7,
+            "entity_type": "processor",
+            "entity_id": 121,
+            "entity_key": "processor:121",
+            "state": 2,
+            "alerted": 1,
+            "open": 1,
+            "severity": "critical",
+            "note": "2026-10-19 09:50:00 - Ack (netops) investigating",
+            "info": "{\"until_clear\":true}",
+            "details": { "rule": [ { "processor_id": 121, "processor_descr": "CPU 1", "processor_usage": 95 } ] },
+            "first_seen": "2026-10-19 09:41:00",
+            "last_seen": "2026-10-19 09:45:00",
+            "timestamp": "2026-10-19 09:50:00",
+            "name": "Processor usage over 90%",
+            "proc": null,
+            "notes": ""
+        }
+    ],
+    "count": 2
+}

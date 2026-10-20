@@ -10,21 +10,90 @@ namespace DesktopNMS.Core.Api;
 /// <summary>Implementation of <see cref="IAlertsApi"/> over <see cref="ILibreNmsTransport"/>.</summary>
 internal sealed class AlertsApi : IAlertsApi
 {
+    /// <summary>No alert has this state, so /faults answers with an empty list - the cheapest way to see whether the route exists.</summary>
+    internal const string ProbeUrl = "faults?state=-1";
+
     private readonly ILibreNmsTransport _transport;
+    private readonly SemaphoreSlim _probeLock = new(1, 1);
+    private (LibreNmsConnection? Connection, AlertSource Source)? _detected;
 
     public AlertsApi(ILibreNmsTransport transport) => _transport = transport;
 
-    public Task<IReadOnlyList<Alert>> ListAsync(AlertQuery? query = null, CancellationToken cancellationToken = default)
+    public async Task<AlertSource> GetSourceAsync(CancellationToken cancellationToken = default)
     {
-        var url = (query ?? AlertQuery.Open).ToRelativeUrl();
-        return _transport.GetCollectionAsync<Alert>(url, "alerts", cancellationToken);
+        var connection = _transport.Connection;
+        if (_detected is { } known && ReferenceEquals(known.Connection, connection))
+        {
+            return known.Source;
+        }
+
+        await _probeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_detected is { } again && ReferenceEquals(again.Connection, connection))
+            {
+                return again.Source;
+            }
+
+            AlertSource source;
+            try
+            {
+                await _transport.GetCollectionAsync<Alert>(ProbeUrl, "alerts", cancellationToken).ConfigureAwait(false);
+                source = AlertSource.Fault;
+            }
+            catch (LibreNmsApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                // No /faults route: LibreNMS before 26.10. Anything else - a
+                // 403 above all - is thrown, never taken as "use /alerts".
+                source = AlertSource.Alert;
+            }
+
+            _detected = (connection, source);
+            return source;
+        }
+        finally
+        {
+            _probeLock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<Alert>> ListAsync(AlertQuery? query = null, CancellationToken cancellationToken = default)
+    {
+        var source = await GetSourceAsync(cancellationToken).ConfigureAwait(false);
+        var url = (query ?? AlertQuery.Open).ToRelativeUrl(Path(source));
+        var alerts = await _transport.GetCollectionAsync<Alert>(url, "alerts", cancellationToken).ConfigureAwait(false);
+        return Mark(alerts, source);
     }
 
     public async Task<Alert?> GetAsync(int alertId, CancellationToken cancellationToken = default)
     {
-        var url = "alerts/" + alertId.ToString(CultureInfo.InvariantCulture);
+        var source = await GetSourceAsync(cancellationToken).ConfigureAwait(false);
+        var url = Path(source) + "/" + alertId.ToString(CultureInfo.InvariantCulture);
         var alerts = await _transport.GetCollectionAsync<Alert>(url, "alerts", cancellationToken).ConfigureAwait(false);
-        return alerts.Count > 0 ? alerts[0] : null;
+        return alerts.Count > 0 ? Mark(alerts, source)[0] : null;
+    }
+
+    private static string Path(AlertSource source) => source == AlertSource.Fault ? "faults" : "alerts";
+
+    /// <summary>
+    /// Tags each row with where it came from. A row carrying fault columns is
+    /// a fault whatever the endpoint - belt and braces should /alerts ever
+    /// answer with faults on a server the probe saw as legacy.
+    /// </summary>
+    private IReadOnlyList<Alert> Mark(IReadOnlyList<Alert> alerts, AlertSource source)
+    {
+        if (source == AlertSource.Alert && alerts.Any(a => a.EntityKey is not null))
+        {
+            source = AlertSource.Fault;
+            _detected = (_transport.Connection, source);
+        }
+
+        foreach (var alert in alerts)
+        {
+            alert.Source = source;
+        }
+
+        return alerts;
     }
 
     public async Task AcknowledgeAsync(int alertId, string? note = null, bool untilClear = true, CancellationToken cancellationToken = default)
@@ -36,8 +105,9 @@ internal sealed class AlertsApi : IAlertsApi
             UntilClear = untilClear,
         };
 
+        var path = Path(await GetSourceAsync(cancellationToken).ConfigureAwait(false));
         var response = await _transport
-            .SendAsync(HttpMethod.Put, "alerts/" + alertId.ToString(CultureInfo.InvariantCulture), body, cancellationToken)
+            .SendAsync(HttpMethod.Put, path + "/" + alertId.ToString(CultureInfo.InvariantCulture), body, cancellationToken)
             .ConfigureAwait(false);
         response.Dispose();
     }
@@ -46,8 +116,9 @@ internal sealed class AlertsApi : IAlertsApi
     {
         var body = new UnmuteRequest { Note = note ?? string.Empty };
 
+        var path = Path(await GetSourceAsync(cancellationToken).ConfigureAwait(false));
         var response = await _transport
-            .SendAsync(HttpMethod.Put, "alerts/unmute/" + alertId.ToString(CultureInfo.InvariantCulture), body, cancellationToken)
+            .SendAsync(HttpMethod.Put, path + "/unmute/" + alertId.ToString(CultureInfo.InvariantCulture), body, cancellationToken)
             .ConfigureAwait(false);
         response.Dispose();
     }

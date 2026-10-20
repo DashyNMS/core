@@ -4,13 +4,17 @@ using System.Text.Json.Serialization;
 namespace DesktopNMS.Core.Models;
 
 /// <summary>
-/// A row from the LibreNMS /api/v0/alerts endpoint.
+/// A row from LibreNMS's alerts list: before 26.10, one per rule and device
+/// (/api/v0/alerts, the alerts table); from 26.10, one per matching entity -
+/// a core, a port, a sensor - (/api/v0/faults, alert_faults). See
+/// <see cref="Source"/> and <see cref="Identity"/>.
 /// </summary>
 /// <remarks>
-/// The API selects <c>devices.hostname</c>, every column of <c>alerts</c>, and
-/// <c>severity</c>/<c>name</c>/<c>proc</c>/<c>notes</c> from <c>alert_rules</c>.
-/// Unrecognised columns land in <see cref="AdditionalData"/> so a LibreNMS
-/// upgrade that adds columns does not break deserialisation.
+/// The API selects <c>devices.hostname</c>, every column of the alerts or
+/// alert_faults table, and <c>severity</c>/<c>name</c>/<c>proc</c>/<c>notes</c>
+/// from <c>alert_rules</c>. Unrecognised columns land in
+/// <see cref="AdditionalData"/> so a LibreNMS upgrade that adds columns does
+/// not break deserialisation.
 /// </remarks>
 public sealed class Alert
 {
@@ -70,8 +74,44 @@ public sealed class Alert
     [JsonPropertyName("notes")]
     public string? RuleNotes { get; set; }
 
+    /// <summary>A fault's entity type, e.g. "processor" or "port" - null on a legacy alert or a fault LibreNMS didn't type.</summary>
+    [JsonPropertyName("entity_type")]
+    public string? EntityType { get; set; }
+
+    /// <summary>The fault's entity id (a processor id, a port id...) - null on a legacy alert.</summary>
+    [JsonPropertyName("entity_id")]
+    public long? EntityId { get; set; }
+
+    /// <summary>What tells this fault apart from its device/rule siblings - empty for a fault LibreNMS made from a pre-26.10 alert, null on a legacy alert.</summary>
+    [JsonPropertyName("entity_key")]
+    public string? EntityKey { get; set; }
+
+    /// <summary>
+    /// The fault's own details: the rule's matched rows for this entity
+    /// (26.10+). Legacy alerts have none - their details are in the alert log.
+    /// May hold anything the device reports, so redact before showing or sending it.
+    /// </summary>
+    [JsonPropertyName("details")]
+    public JsonElement? Details { get; set; }
+
+    /// <summary>When this fault was first seen (26.10+).</summary>
+    [JsonPropertyName("first_seen")]
+    public DateTime? FirstSeen { get; set; }
+
+    /// <summary>When this fault was last seen matching (26.10+).</summary>
+    [JsonPropertyName("last_seen")]
+    public DateTime? LastSeen { get; set; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalData { get; set; }
+
+    /// <summary>Which kind of row this is - set by <see cref="Api.IAlertsApi"/> from the endpoint it came from.</summary>
+    [JsonIgnore]
+    public AlertSource Source { get; set; } = AlertSource.Alert;
+
+    /// <summary>Id and source together - what to keep across polls and restarts, see <see cref="AlertKey"/>.</summary>
+    [JsonIgnore]
+    public AlertKey Identity => new(Source, Id);
 
     [JsonIgnore]
     public AlertState State => AlertStateExtensions.FromValue(StateValue);
@@ -89,12 +129,13 @@ public sealed class Alert
     public string DisplayRuleName => string.IsNullOrWhiteSpace(RuleName) ? $"Rule {RuleId}" : RuleName!;
 
     /// <summary>
-    /// Identity used to tell "the same alert as last poll" from "a new alert".
-    /// The alerts table reuses a row for a rule/device pair, so the id alone is
-    /// the right key; the state is tracked separately.
+    /// Identity used to tell "the same alert as last poll" from "a new alert"
+    /// within one server's rows - the alerts table reuses a row for a
+    /// rule/device pair, and a fault keeps its row while it's open. Across
+    /// sessions or an upgrade to LibreNMS 26.10, use <see cref="Identity"/>.
     /// </summary>
     [JsonIgnore]
     public int Key => Id;
 
-    public override string ToString() => $"#{Id} {DisplayHostname}: {DisplayRuleName} [{Severity}/{State}]";
+    public override string ToString() => $"{Identity} {DisplayHostname}: {DisplayRuleName} [{Severity}/{State}]";
 }

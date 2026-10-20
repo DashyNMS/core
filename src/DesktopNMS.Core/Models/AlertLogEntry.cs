@@ -24,6 +24,10 @@ public sealed class AlertLogEntry
     [JsonPropertyName("device_id")]
     public int DeviceId { get; set; }
 
+    /// <summary>The fault this entry belongs to (LibreNMS 26.10+); null on older servers and entries logged before the upgrade.</summary>
+    [JsonPropertyName("fault_id")]
+    public int? FaultId { get; set; }
+
     /// <summary>Raw alert_log.state. Uses the same 0/1/2/3/4 vocabulary as alerts.state.</summary>
     [JsonPropertyName("state")]
     public int StateValue { get; set; }
