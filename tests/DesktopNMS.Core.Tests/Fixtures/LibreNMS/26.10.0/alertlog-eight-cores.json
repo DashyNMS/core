@@ -1,0 +1,22 @@
+{
+    "status": "ok",
+    "logs": [
+        { "id": 8007, "rule_id": 3, "device_id": 7, "fault_id": 9207, "state": 1, "time_logged": "2026-10-20 09:00:07", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": { "rule": [ { "processor_id": 307, "processor_descr": "CPU 7", "processor_usage": 98 } ] } },
+        { "id": 8006, "rule_id": 3, "device_id": 7, "fault_id": 9206, "state": 1, "time_logged": "2026-10-20 09:00:06", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": { "rule": [ { "processor_id": 306, "processor_descr": "CPU 6", "processor_usage": 97 } ] } },
+        { "id": 8005, "rule_id": 3, "device_id": 7, "fault_id": 9205, "state": 1, "time_logged": "2026-10-20 09:00:05", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": { "rule": [ { "processor_id": 305, "processor_descr": "CPU 5", "processor_usage": 96 } ] } },
+        { "id": 8004, "rule_id": 3, "device_id": 7, "fault_id": 9204, "state": 1, "time_logged": "2026-10-20 09:00:04", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": { "rule": [ { "processor_id": 304, "processor_descr": "CPU 4", "processor_usage": 95 } ] } },
+        { "id": 8003, "rule_id": 3, "device_id": 7, "fault_id": 9203, "state": 1, "time_logged": "2026-10-20 09:00:03", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": { "rule": [ { "processor_id": 303, "processor_descr": "CPU 3", "processor_usage": 94 } ] } },
+        { "id": 8002, "rule_id": 3, "device_id": 7, "fault_id": 9202, "state": 1, "time_logged": "2026-10-20 09:00:02", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": { "rule": [ { "processor_id": 302, "processor_descr": "CPU 2", "processor_usage": 93 } ] } },
+        { "id": 8001, "rule_id": 3, "device_id": 7, "fault_id": 9201, "state": 1, "time_logged": "2026-10-20 09:00:01", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": { "rule": [ { "processor_id": 301, "processor_descr": "CPU 1", "processor_usage": 92 } ] } },
+        { "id": 8000, "rule_id": 3, "device_id": 7, "fault_id": 9200, "state": 1, "time_logged": "2026-10-20 09:00:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": { "rule": [ { "processor_id": 300, "processor_descr": "CPU 0", "processor_usage": 91 } ] } },
+        { "id": 7300, "rule_id": 3, "device_id": 7, "fault_id": 9150, "state": 1, "time_logged": "2026-10-12 14:00:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null },
+        { "id": 7301, "rule_id": 3, "device_id": 7, "fault_id": 9151, "state": 1, "time_logged": "2026-10-12 14:00:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null },
+        { "id": 7302, "rule_id": 3, "device_id": 7, "fault_id": null, "state": 3, "time_logged": "2026-10-12 14:05:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null },
+        { "id": 7303, "rule_id": 3, "device_id": 7, "fault_id": 9150, "state": 0, "time_logged": "2026-10-12 15:00:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null },
+        { "id": 7304, "rule_id": 3, "device_id": 7, "fault_id": 9151, "state": 0, "time_logged": "2026-10-12 15:30:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null },
+        { "id": 5100, "rule_id": 3, "device_id": 7, "fault_id": null, "state": 1, "time_logged": "2026-10-02 08:00:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null },
+        { "id": 5101, "rule_id": 3, "device_id": 7, "fault_id": null, "state": 0, "time_logged": "2026-10-02 09:00:00", "hostname": "core-sw-01.example.net", "sysName": "core-sw-01", "details": null }
+    ],
+    "count": 15,
+    "total": "15"
+}

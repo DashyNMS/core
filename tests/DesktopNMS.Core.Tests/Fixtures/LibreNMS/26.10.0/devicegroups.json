@@ -1,0 +1,9 @@
+{
+    "status": "ok",
+    "groups": [
+        { "id": 1, "name": "Core switches", "desc": "", "type": "static", "rules": null, "pattern": null },
+        { "id": 2, "name": "Cameras", "desc": "Gate and lobby", "type": "dynamic", "rules": { "condition": "AND", "rules": [ { "id": "devices.os", "field": "devices.os", "type": "string", "input": "text", "operator": "equal", "value": "ping" } ], "valid": true }, "pattern": null },
+        { "id": 3, "name": "Finance", "desc": "", "type": "static", "rules": null, "pattern": null }
+    ],
+    "count": 3
+}
