@@ -1,0 +1,70 @@
+name: Development build
+
+# Every merge to main publishes a prerelease of the package, so the apps'
+# development builds can pin an exact commit's Core before it's released:
+# the next patch after the latest release tag, then -ci.<run>, for example
+# 1.0.1-ci.42. The commit is in the package's repository metadata. Also
+# runnable by hand, and nightly in case main moved without a run.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: development-build
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish a development package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Work out the version
+        id: version
+        run: |
+          latest=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+          base=${latest#v}
+          base=${base:-0.0.0}
+          IFS=. read -r major minor patch <<< "$base"
+          echo "version=$major.$minor.$((patch + 1))-ci.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Skip a nightly with nothing new
+        id: changed
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ -z "$(git log --since='25 hours ago' --format=%H -1)" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Test
+        if: steps.changed.outputs.skip != 'true'
+        run: dotnet test DashyNMS.Core.sln -c Release
+
+      - name: Pack
+        if: steps.changed.outputs.skip != 'true'
+        run: dotnet pack src/DesktopNMS.Core/DesktopNMS.Core.csproj -c Release -o artifacts -p:Version=${{ steps.version.outputs.version }} -p:RepositoryCommit=${{ github.sha }}
+
+      - name: Publish to GitHub Packages
+        if: steps.changed.outputs.skip != 'true'
+        run: dotnet nuget push "artifacts/*.nupkg" --source "https://nuget.pkg.github.com/DashyNMS/index.json" --api-key "${{ secrets.GITHUB_TOKEN }}" --skip-duplicate
+
+      - name: Summary
+        if: steps.changed.outputs.skip != 'true'
+        run: echo "Published DashyNMS.Core ${{ steps.version.outputs.version }} from ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
