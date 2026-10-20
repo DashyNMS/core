@@ -10,8 +10,9 @@
     <Copyright>Copyright (c) 2026 Thomas Pickup</Copyright>
     <NeutralLanguage>en-GB</NeutralLanguage>
 
-    <!-- Overridden by the release workflow from the tag (v1.2.3 -> 1.2.3). -->
-    <Version>1.0.0</Version>
+    <!-- The version being built towards. Development builds publish it as
+         2.0.0-ci.N; the release workflow overrides it from the tag (v2.0.0). -->
+    <Version>2.0.0</Version>
   </PropertyGroup>
 
 </Project>
