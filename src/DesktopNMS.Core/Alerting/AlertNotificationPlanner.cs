@@ -12,7 +12,21 @@ public sealed record PlannedNotification(
     ToastPersistence Persistence,
     bool PlaySound,
     bool IsProblem,
-    AlertChange? Change);
+    AlertChange? Change)
+{
+    /// <summary>
+    /// The device and rule's notification, if one is still showing, should
+    /// change in place without popping up again (#5) - more faults, or some
+    /// cleared, on a group that was already firing.
+    /// </summary>
+    public bool IsUpdate { get; init; }
+
+    /// <summary>
+    /// Names the device and rule's notification (<see cref="AlertChange.NotificationTag"/>),
+    /// so a later one for the same group replaces it. Null for a summary.
+    /// </summary>
+    public string? Tag { get; init; }
+}
 
 /// <summary>What a poll's alert changes turn into: the notifications to show, or why there are none.</summary>
 public sealed class AlertNotificationPlan
@@ -108,9 +122,12 @@ public static class AlertNotificationPlanner
             return Suppressed("none notifiable (" + string.Join("; ", reasons) + ")", leftOut);
         }
 
-        if (notifiable.Count > settings.MaxToastsPerPoll)
+        // Updates change a group's notification in place, so they never count
+        // towards a burst - and a summary covers them.
+        var fresh = notifiable.Where(change => change.Kind != AlertChangeKind.Updated).ToList();
+        if (fresh.Count > settings.MaxToastsPerPoll)
         {
-            return new AlertNotificationPlan(new[] { Summary(notifiable, settings, deviceName, deviceLocation) }, isSummary: true, notifiable.Count, suppressionReason: null, leftOut);
+            return new AlertNotificationPlan(new[] { Summary(fresh, settings, deviceName, deviceLocation) }, isSummary: true, notifiable.Count, suppressionReason: null, leftOut);
         }
 
         var planned = notifiable.Select(change => ForChange(change, settings, deviceName)).ToList();
@@ -126,7 +143,8 @@ public static class AlertNotificationPlanner
         // Acknowledging or returning an alert to active from within the app
         // must not notify you about your own action.
         if (change.Kind is AlertChangeKind.Acknowledged or AlertChangeKind.Unacknowledged
-            && wasSelfInitiated?.Invoke(change) == true)
+            && wasSelfInitiated is not null
+            && WasSelfInitiated(change, wasSelfInitiated))
         {
             return false;
         }
@@ -144,12 +162,33 @@ public static class AlertNotificationPlanner
 
         return change.Kind switch
         {
-            AlertChangeKind.New or AlertChangeKind.Reopened or AlertChangeKind.Unacknowledged
+            AlertChangeKind.New or AlertChangeKind.Reopened or AlertChangeKind.Unacknowledged or AlertChangeKind.Updated
                 => settings.ForSeverity(severity).Enabled,
             AlertChangeKind.Recovered => settings.NotifyOnRecovery,
             AlertChangeKind.Acknowledged => settings.NotifyOnAcknowledge,
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// A group's acknowledgement was this app's own if any of its faults was:
+    /// the tracker records the fault acted on, and a group change is shown by
+    /// its first. Every fault is asked, as asking consumes the record.
+    /// </summary>
+    private static bool WasSelfInitiated(AlertChange change, Func<AlertChange, bool> wasSelfInitiated)
+    {
+        if (change.Faults.Count <= 1)
+        {
+            return wasSelfInitiated(change);
+        }
+
+        var any = false;
+        foreach (var fault in change.Faults)
+        {
+            any |= wasSelfInitiated(new AlertChange(fault, change.Kind, change.PreviousState));
+        }
+
+        return any;
     }
 
     /// <summary>"Critical: core-sw-01", "Critical again: ...", "Recovered: ..." and so on.</summary>
@@ -221,18 +260,73 @@ public static class AlertNotificationPlanner
     {
         var alert = change.Alert;
         var isProblem = change.IsProblem;
+        var isUpdate = change.Kind == AlertChangeKind.Updated;
         var severitySettings = settings.ForSeverity(alert.Severity);
 
         // Recoveries and acknowledgements are informational: never sticky, never a sound.
+        // An update keeps the group's notification as insistent as it was, but silent.
         return new PlannedNotification(
             BuildTitle(change, deviceName(alert)),
             alert.DisplayRuleName,
-            string.IsNullOrWhiteSpace(alert.Note) ? null : FirstLine(alert.Note!),
+            Detail(change),
             alert.Severity,
-            isProblem ? severitySettings.Persistence : ToastPersistence.Transient,
+            isProblem || isUpdate ? severitySettings.Persistence : ToastPersistence.Transient,
             isProblem && severitySettings.PlaySound,
             isProblem,
-            change);
+            change)
+        {
+            IsUpdate = isUpdate,
+            Tag = change.NotificationTag,
+        };
+    }
+
+    /// <summary>
+    /// What the faults are: "CPU 0, CPU 1 and 2 more", "2 more faults, 6 open",
+    /// "All 4 faults cleared" - or for a single alert its note, or what it's about.
+    /// </summary>
+    public static string? Detail(AlertChange change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        switch (change.Kind)
+        {
+            case AlertChangeKind.Updated:
+            {
+                var parts = new List<string>();
+                if (change.AddedCount > 0)
+                {
+                    parts.Add(change.AddedCount == 1 ? "1 more fault" : $"{change.AddedCount} more faults");
+                }
+
+                if (change.ClearedCount > 0)
+                {
+                    parts.Add($"{change.ClearedCount} cleared");
+                }
+
+                parts.Add($"{change.OutstandingCount} open");
+                return string.Join(", ", parts);
+            }
+
+            case AlertChangeKind.Recovered when change.ClearedCount > 1:
+                return $"All {change.ClearedCount} faults cleared";
+        }
+
+        if (change.OutstandingCount > 1)
+        {
+            var names = change.Faults.Select(AlertGrouping.EntityName).OfType<string>().Distinct().ToList();
+            if (names.Count == 0)
+            {
+                return $"{change.OutstandingCount} faults";
+            }
+
+            var shown = names.Take(2).ToList();
+            var more = change.OutstandingCount - shown.Count;
+            return more > 0 ? $"{string.Join(", ", shown)} and {more} more" : string.Join(" and ", shown);
+        }
+
+        return string.IsNullOrWhiteSpace(change.Alert.Note)
+            ? AlertGrouping.EntityName(change.Alert)
+            : FirstLine(change.Alert.Note!);
     }
 
     private static PlannedNotification Summary(

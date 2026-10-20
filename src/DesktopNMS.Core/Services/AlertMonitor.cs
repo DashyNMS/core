@@ -25,6 +25,17 @@ public sealed class AlertPollResult
     /// <summary>True for the first successful poll of this session.</summary>
     public required bool IsFirstPoll { get; init; }
 
+    /// <summary>
+    /// This poll only recorded what's open (#5) - after the server switched
+    /// between alerts and faults, or with state saved by an older DashyNMS.
+    /// <see cref="Changes"/> is empty, and any notification still showing
+    /// from before should be withdrawn: its ids may now mean something else.
+    /// </summary>
+    public bool IsBaseline { get; init; }
+
+    /// <summary>Whether <see cref="Alerts"/> are faults (LibreNMS 26.10+) or alerts.</summary>
+    public AlertSource Source { get; init; }
+
     public string? ErrorMessage { get; init; }
 
     public bool IsAuthenticationFailure { get; init; }
@@ -63,7 +74,7 @@ public sealed class AlertMonitor : IDisposable
 
     private CancellationTokenSource? _cts;
     private Task? _loop;
-    private Dictionary<int, int> _previousStates = new();
+    private AlertWatchState _previous = AlertWatchState.Empty;
     private bool _hasCompletedFirstPoll;
     private bool _disposed;
 
@@ -119,7 +130,7 @@ public sealed class AlertMonitor : IDisposable
         }
 
         StartedAt = DateTimeOffset.UtcNow;
-        _previousStates = new Dictionary<int, int>(_notificationState.Load());
+        _previous = _notificationState.Load();
         _hasCompletedFirstPoll = false;
 
         _cts = new CancellationTokenSource();
@@ -221,6 +232,7 @@ public sealed class AlertMonitor : IDisposable
 
             var query = _settings.Current.IncludeRecoveredAlerts ? AlertQuery.All : AlertQuery.Open;
             var alerts = await _client.Alerts.ListAsync(query, cancellationToken).ConfigureAwait(false);
+            var source = await _client.Alerts.GetSourceAsync(cancellationToken).ConfigureAwait(false);
 
             // Device names for the list come from here, not from the alert rows,
             // so refresh before publishing the result. This never throws.
@@ -228,27 +240,38 @@ public sealed class AlertMonitor : IDisposable
                 .EnsureCurrentAsync(alerts.Select(a => a.DeviceId), cancellationToken)
                 .ConfigureAwait(false);
 
-            var changes = AlertChangeDetector.Detect(_previousStates, alerts);
-            _previousStates = AlertChangeDetector.Snapshot(alerts);
-            _notificationState.Save(_previousStates);
+            // Recoveries are looked up whatever the list shows (#5).
+            var (recovered, unresolved) = await FindRecoveredAsync(alerts, query, source, cancellationToken).ConfigureAwait(false);
+            var watched = recovered.Count == 0 ? alerts : alerts.Concat(recovered).ToList();
+
+            var result = AlertGroupChangeDetector.Detect(_previous, source, watched, DateTime.UtcNow, unresolved);
+            _previous = result.Next;
+            _notificationState.Save(_previous);
 
             var isFirstPoll = !_hasCompletedFirstPoll;
             _hasCompletedFirstPoll = true;
             LastSuccessfulPoll = DateTimeOffset.Now;
 
+            if (result.IsBaseline)
+            {
+                _logger.LogInformation("Recorded {Count} open {Source}s without notifying: {Reason}", alerts.Count, source, result.BaselineReason);
+            }
+
             _logger.LogDebug(
                 "Polled {Count} alerts, {Changes} change(s){First}",
                 alerts.Count,
-                changes.Count,
+                result.Changes.Count,
                 isFirstPoll ? " (first poll)" : string.Empty);
 
             Polled?.Invoke(this, new AlertPollResult
             {
                 Succeeded = true,
                 Alerts = alerts,
-                Changes = changes,
+                Changes = result.Changes,
                 CompletedAt = LastSuccessfulPoll.Value,
                 IsFirstPoll = isFirstPoll,
+                IsBaseline = result.IsBaseline,
+                Source = source,
             });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -277,10 +300,91 @@ public sealed class AlertMonitor : IDisposable
     /// </summary>
     public void ResetHistory()
     {
-        _previousStates = new Dictionary<int, int>();
+        _previous = AlertWatchState.Empty;
         _hasCompletedFirstPoll = false;
-        _notificationState.Save(_previousStates);
+        _notificationState.Save(_previous);
     }
+
+    /// <summary>
+    /// Looks up last poll's open alerts that this poll's list no longer has,
+    /// so a recovery is seen even when recovered alerts aren't listed. A
+    /// handful are fetched by id; a rule with many - a mass recovery - is
+    /// fetched once, by rule. One that can't be looked up is unresolved and
+    /// kept for the next poll; one that's gone is never taken as recovered.
+    /// </summary>
+    private async Task<(IReadOnlyList<Alert> Recovered, IReadOnlyCollection<AlertKey> Unresolved)> FindRecoveredAsync(
+        IReadOnlyList<Alert> listed,
+        AlertQuery query,
+        AlertSource source,
+        CancellationToken cancellationToken)
+    {
+        var none = (Array.Empty<Alert>(), (IReadOnlyCollection<AlertKey>)Array.Empty<AlertKey>());
+        if (query.States?.Contains(AlertState.Recovered) == true || _previous.NeedsBaseline || _previous.Source != source)
+        {
+            // The list already says, or there's nothing comparable to look for.
+            return none;
+        }
+
+        var seen = listed.Select(a => a.Identity).ToHashSet();
+        var missing = _previous.Outstanding.Where(e => !seen.Contains(e.Key)).ToList();
+        if (missing.Count == 0)
+        {
+            return none;
+        }
+
+        var recovered = new List<Alert>();
+        var unresolved = new List<AlertKey>();
+
+        foreach (var rule in missing.GroupBy(e => e.Value.RuleId))
+        {
+            var keys = rule.Select(e => e.Key).ToHashSet();
+            try
+            {
+                IEnumerable<Alert> found;
+                if (keys.Count <= LookupByIdLimit)
+                {
+                    var rows = new List<Alert>();
+                    foreach (var key in keys)
+                    {
+                        rows.AddRange(await _client.Alerts
+                            .ListAsync(new AlertQuery { Id = key.Id, States = AlertQuery.All.States, OrderBy = null }, cancellationToken)
+                            .ConfigureAwait(false));
+                    }
+
+                    found = rows;
+                }
+                else
+                {
+                    found = await _client.Alerts
+                        .ListAsync(new AlertQuery { RuleId = rule.Key, States = AlertQuery.All.States }, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                foreach (var row in found.Where(r => keys.Contains(r.Identity)))
+                {
+                    if (row.State == AlertState.Recovered)
+                    {
+                        recovered.Add(row);
+                    }
+                    else
+                    {
+                        // Open after all - the list and this lookup crossed. Ask again next poll.
+                        unresolved.Add(row.Identity);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(ex, "Could not check whether {Count} alert(s) for rule {Rule} recovered; checking again next poll", keys.Count, rule.Key);
+                unresolved.AddRange(keys);
+            }
+        }
+
+        return (recovered, unresolved);
+    }
+
+    /// <summary>Up to this many missing alerts for one rule are looked up one by one; more, and the rule's recoveries are listed instead.</summary>
+    private const int LookupByIdLimit = 5;
 
     public void Dispose()
     {
