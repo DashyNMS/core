@@ -104,6 +104,8 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
     /// <summary>Writes this token has been refused this session (#51) - forgotten whenever the connection changes.</summary>
     public ApiPermissions Permissions { get; } = new();
 
+    ApiPermissions? ILibreNmsTransport.Permissions => Permissions;
+
     public void Configure(LibreNmsConnection connection, bool startOnBackup = false)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -283,7 +285,7 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
 
             throw;
         }
-        catch (LibreNmsApiException ex) when (ApiPermissions.IsCrashedPermissionCheck(method, relativeUrl, ex))
+        catch (LibreNmsApiException ex) when (Permissions.IsCrashedPermissionCheckOnThisServer(method, relativeUrl, ex))
         {
             // LibreNMS's own permission check crashed for a user who isn't an
             // admin - see ApiPermissions.IsCrashedPermissionCheck. Nothing was

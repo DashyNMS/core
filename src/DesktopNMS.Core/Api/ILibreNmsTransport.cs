@@ -40,4 +40,7 @@ public interface ILibreNmsTransport
     /// step is skipped, since there is no envelope to parse.
     /// </summary>
     Task<string> SendRawAsync(string relativeUrl, CancellationToken cancellationToken = default);
+
+    /// <summary>What this connection has learned it can't do (#51, #9) - null for a transport that doesn't track it, such as a test fake.</summary>
+    ApiPermissions? Permissions => null;
 }
