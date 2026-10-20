@@ -595,9 +595,22 @@ internal sealed class DeviceGroupsApi : IDeviceGroupsApi
     public async Task<IReadOnlyList<int>> GetMemberDeviceIdsAsync(int groupId, CancellationToken cancellationToken = default)
     {
         var url = "devicegroups/" + groupId.ToString(CultureInfo.InvariantCulture);
-        var members = await _transport.GetCollectionAsync<DeviceGroupMember>(url, "devices", cancellationToken).ConfigureAwait(false);
-        return members.Select(m => m.DeviceId).ToArray();
+        try
+        {
+            var members = await _transport.GetCollectionAsync<DeviceGroupMember>(url, "devices", cancellationToken).ConfigureAwait(false);
+            return members.Select(m => m.DeviceId).ToArray();
+        }
+        catch (LibreNmsApiException ex) when (IsEmptyGroup(ex))
+        {
+            // LibreNMS answers an empty group - or one whose devices this account can't see - with a 404 (#10).
+            return Array.Empty<int>();
+        }
     }
+
+    /// <summary>LibreNMS's "No devices found in group ..." 404, which means empty, not missing.</summary>
+    internal static bool IsEmptyGroup(LibreNmsApiException ex)
+        => ex.StatusCode == System.Net.HttpStatusCode.NotFound
+           && ex.ServerMessage?.StartsWith("No devices found in group", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>Shared by <see cref="GetMembershipByDeviceAsync"/> and <see cref="GetMemberCountsAsync"/> - one bounded-concurrency pass over every group's own membership call.</summary>
     private async Task<IReadOnlyList<(DeviceGroup Group, IReadOnlyList<int> DeviceIds)>> FetchAllMembershipsAsync(IReadOnlyList<DeviceGroup> groups, CancellationToken cancellationToken)
@@ -611,6 +624,11 @@ internal sealed class DeviceGroupsApi : IDeviceGroupsApi
             {
                 var deviceIds = await GetMemberDeviceIdsAsync(group.Id, cancellationToken).ConfigureAwait(false);
                 return (Group: group, DeviceIds: deviceIds);
+            }
+            catch (LibreNmsApiException ex) when (ex.IsPermissionDenied)
+            {
+                // LibreNMS 26.10 refuses a group this account can't view (#9) - one such group mustn't fail the rest.
+                return (Group: group, DeviceIds: (IReadOnlyList<int>)Array.Empty<int>());
             }
             finally
             {
