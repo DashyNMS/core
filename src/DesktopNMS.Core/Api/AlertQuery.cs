@@ -36,6 +36,13 @@ public sealed class AlertQuery
     /// <summary>Restrict to a single alert rule.</summary>
     public int? RuleId { get; init; }
 
+    /// <summary>
+    /// One alert or fault by id - faults/{id}?state=... The route filters by
+    /// state like the list does, so without <see cref="States"/> a recovered
+    /// or acknowledged one isn't found.
+    /// </summary>
+    public int? Id { get; init; }
+
     /// <summary>Sort column and direction, e.g. "timestamp desc". Must be an alerts column.</summary>
     public string? OrderBy { get; init; } = "timestamp desc";
 
@@ -43,6 +50,11 @@ public sealed class AlertQuery
     public string ToRelativeUrl(string path = "alerts")
     {
         var builder = new StringBuilder(path);
+        if (Id is > 0)
+        {
+            builder.Append('/').Append(Id.Value.ToString(CultureInfo.InvariantCulture));
+        }
+
         var first = true;
 
         void Append(string name, string value)
