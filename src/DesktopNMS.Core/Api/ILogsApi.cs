@@ -17,8 +17,9 @@ public interface ILogsApi
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Returns the most recent alert log entry for a rule on a device, which is
-    /// the one carrying the faults for the alert currently showing.
+    /// Returns the most recent alert log entry for a rule on a device. Right
+    /// for a legacy alert; on LibreNMS 26.10 it may belong to another fault of
+    /// the same rule, so use <see cref="Alerting.AlertLogLookups.GetLatestForAlertAsync"/> (#7).
     /// </summary>
     Task<AlertLogEntry?> GetLatestForRuleAsync(
         int deviceId,
