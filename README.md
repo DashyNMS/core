@@ -32,10 +32,9 @@ Needs the .NET 9 and .NET 10 SDKs. CI runs the tests on Windows, macOS and Linux
 
 ## Releasing
 
-**Development builds:** every merge to `main` (and a nightly run when something changed) publishes a prerelease, the next patch plus `-ci.<run>` (for example `1.0.1-ci.42`). An app's development build can pin one to test unreleased Core. The workflow summary says which commit each one was built from.
+**Development builds:** every merge to `main` (and a nightly run when something changed) publishes a prerelease: the version being built towards (`<Version>` in `Directory.Build.props`) plus `-ci.<run>`, for example `2.0.0-ci.42`. An app's development build can pin one to test unreleased Core. The workflow summary says which commit each one was built from.
 
-**Releases:** 
-Push a tag `v1.2.3`. The release workflow tests, packs that version and publishes it to GitHub Packages. Versions follow semver: a breaking change to the public API, or to anything persisted in settings, is a major bump.
+**Releases:** push a tag such as `v2.0.0`. The release workflow tests, packs that version and publishes it to GitHub Packages. Then raise `<Version>` to the next version being worked on, so later development builds sort after the release. Versions follow semver: a breaking change to the public API, or to anything persisted in settings, is a major bump.
 
 ## History
 
