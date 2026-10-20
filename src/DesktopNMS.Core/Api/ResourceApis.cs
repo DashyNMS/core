@@ -106,10 +106,10 @@ internal sealed class AlertsApi : IAlertsApi
         };
 
         var path = Path(await GetSourceAsync(cancellationToken).ConfigureAwait(false));
-        var response = await _transport
+        using var response = await _transport
             .SendAsync(HttpMethod.Put, path + "/" + alertId.ToString(CultureInfo.InvariantCulture), body, cancellationToken)
             .ConfigureAwait(false);
-        response.Dispose();
+        ThrowIfMissing(response, alertId);
     }
 
     public async Task UnmuteAsync(int alertId, string? note = null, CancellationToken cancellationToken = default)
@@ -117,10 +117,27 @@ internal sealed class AlertsApi : IAlertsApi
         var body = new UnmuteRequest { Note = note ?? string.Empty };
 
         var path = Path(await GetSourceAsync(cancellationToken).ConfigureAwait(false));
-        var response = await _transport
+        using var response = await _transport
             .SendAsync(HttpMethod.Put, path + "/unmute/" + alertId.ToString(CultureInfo.InvariantCulture), body, cancellationToken)
             .ConfigureAwait(false);
-        response.Dispose();
+        ThrowIfMissing(response, alertId);
+    }
+
+    /// <summary>
+    /// LibreNMS answers a write to a missing alert - or one where nothing
+    /// changed - with HTTP 200 and "No Alert by that ID" (#6). That's not a
+    /// success, so it's thrown as a 404.
+    /// </summary>
+    private static void ThrowIfMissing(JsonDocument response, int alertId)
+    {
+        if (response.RootElement.ValueKind == JsonValueKind.Object
+            && response.RootElement.TryGetProperty("message", out var message)
+            && message.ValueKind == JsonValueKind.String
+            && message.GetString() is { } text
+            && text.StartsWith("No alert by that ID", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new LibreNmsApiException($"Alert {alertId} no longer exists.", System.Net.HttpStatusCode.NotFound, text);
+        }
     }
 }
 

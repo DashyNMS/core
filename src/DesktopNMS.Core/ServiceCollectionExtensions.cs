@@ -24,6 +24,11 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ISettingsStore, SettingsStore>();
         services.AddSingleton<INotificationStateStore, NotificationStateStore>();
+        services.AddSingleton(sp =>
+        {
+            var client = sp.GetRequiredService<ILibreNmsClient>();
+            return new Alerting.AlertActions(client.Alerts, client.Rules);
+        });
 
         // Unimus (issue #115): a second, independent integration with its own
         // lifetime, configured/cleared from Settings rather than alongside
