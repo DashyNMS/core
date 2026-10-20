@@ -21,7 +21,12 @@ public sealed class ProcessorSensor
     [JsonPropertyName("processor_usage")]
     public double? UsagePercent { get; set; }
 
-    /// <summary>LibreNMS's own configured warning threshold for this processor, if set.</summary>
+    /// <summary>
+    /// LibreNMS's own configured warning threshold for this processor. Null
+    /// when unset - from LibreNMS 26.10 (librenms#20768) that means the limit
+    /// was removed, so rules skip this processor. Never read as zero.
+    /// </summary>
     [JsonPropertyName("processor_perc_warn")]
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseNullableDoubleConverter))]
     public double? WarningPercent { get; set; }
 }

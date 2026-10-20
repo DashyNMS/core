@@ -24,6 +24,7 @@ public sealed class MempoolSensor
 
     /// <summary>LibreNMS's own configured warning threshold for this pool, if set.</summary>
     [JsonPropertyName("mempool_perc_warn")]
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseNullableDoubleConverter))]
     public double? WarningPercent { get; set; }
 
     [JsonPropertyName("mempool_used")]
