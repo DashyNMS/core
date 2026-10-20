@@ -1,18 +1,35 @@
-# DashyNMS Core
+<p align="center">
+  <img src="https://dashynms.pckp.net/assets/img/favicon.svg" alt="" width="96" height="96">
+</p>
 
-The shared code behind the DashyNMS desktop app, DashyNMS Mobile and the DashyNMS MCP server:
-- a LibreNMS API client, with Graylog and Unimus clients;
-- the models;
-- alert counting, history and notification rules;
-- graph styling and legends;
-- sign-in helpers;
-- the other logic every app needs to agree on.
+<h1 align="center">DashyNMS Core</h1>
 
-It's plain .NET with no UI, targeting `net9.0` and `net10.0`, and is published as the `DashyNMS.Core` NuGet package on GitHub Packages.
+<p align="center">
+  <strong>The shared heart of every DashyNMS app.</strong><br>
+  One LibreNMS client and one set of rules, so desktop, mobile and the MCP server agree.
+</p>
 
-## Using the package
+<p align="center">
+  <a href="https://dashynms.pckp.net/">Website</a> ·
+  <a href="https://github.com/orgs/DashyNMS/packages?repo_name=core">Package</a> ·
+  <a href="https://github.com/DashyNMS/core/milestones">Roadmap</a>
+</p>
 
-Add the GitHub Packages feed to `nuget.config`:
+---
+
+DashyNMS Core is the plain .NET library behind [DashyNMS desktop](https://github.com/DashyNMS/desktop), [DashyNMS Mobile](https://github.com/DashyNMS/mobile) and [DashyNMS MCP](https://github.com/DashyNMS/mcp). It has no UI. Each app adds its own screens on top, so an alert is counted, named and notified the same way everywhere.
+
+## What's in it
+
+- **LibreNMS, Graylog and Unimus clients:** the API, with LibreNMS's quirks handled once (404s that mean "none", stringly-typed numbers, permission errors that mean "not this token").
+- **Alerting:** change detection between polls, counting, history, notification rules, and the rule builder's field catalogue.
+- **Monitors and caches:** the alert, device and sensor pollers, the device and rule caches, and the dashboard layout. Each app supplies when it's in the background and whether it's signed in.
+- **Graphs:** LibreNMS's graphs restyled to the app's theme, with the app's own legends.
+- **Sign-in, settings and the rest:** sign in with LibreNMS's own page, settings and the starter dashboard, and the open-source notices every app shows.
+
+## Use it
+
+Core is published as the **`DashyNMS.Core`** package on GitHub Packages, for `net9.0` and `net10.0`. Add the feed to `nuget.config`:
 
 ```xml
 <packageSources>
@@ -20,28 +37,46 @@ Add the GitHub Packages feed to `nuget.config`:
 </packageSources>
 ```
 
-GitHub Packages needs a login even for public packages. Use a token with `read:packages` (for example `gh auth refresh -s read:packages`, then `gh auth token`), or `GITHUB_TOKEN` in GitHub Actions with `packages: read`.
+GitHub Packages needs a login even for public packages: a token with `read:packages` (locally, `gh auth refresh -s read:packages`, then `gh auth token`; in GitHub Actions, `GITHUB_TOKEN` with `packages: read`).
 
-## Building
+**Versions**
+- **Releases**, for example `2.0.0`, follow semver. A breaking change to the public API, or to anything saved in settings, is a major version.
+- **Development builds**, `2.0.0-ci.N`, come from every merge to `main`, so an app can test unreleased Core.
+
+The assembly and namespaces are still `DesktopNMS.Core`; renaming them is [#1](https://github.com/DashyNMS/core/issues/1).
+
+## Build it
+
+You need the .NET 9 and .NET 10 SDKs.
 
 ```bash
+git clone https://github.com/DashyNMS/core.git
+cd core
 dotnet test DashyNMS.Core.sln
 ```
 
-Needs the .NET 9 and .NET 10 SDKs. CI runs the tests on Windows, macOS and Linux. A test that only holds on one platform is marked `[WindowsFact]` / `[NotWindowsFact]`.
+CI runs the tests on Windows, macOS and Linux. Mark a test that only holds on one platform with `[WindowsFact]` or `[NotWindowsFact]`.
 
-## Releasing
+**Releasing:** push a tag such as `v2.0.0`. The release workflow tests, packs and publishes that version. Then raise `<Version>` in `Directory.Build.props` to the next version, so later development builds sort after the release.
 
-**Development builds:** every merge to `main` (and a nightly run when something changed) publishes a prerelease: the version being built towards (`<Version>` in `Directory.Build.props`) plus `-ci.<run>`, for example `2.0.0-ci.42`. An app's development build can pin one to test unreleased Core. The workflow summary says which commit each one was built from.
+## Commits, pull requests and issues
 
-**Releases:** push a tag such as `v2.0.0`. The release workflow tests, packs that version and publishes it to GitHub Packages. Then raise `<Version>` to the next version being worked on, so later development builds sort after the release. Versions follow semver: a breaking change to the public API, or to anything persisted in settings, is a major bump.
+The same standard as every DashyNMS repository: `type(scope): what changes, in plain words`.
+- **Types:** `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
+- **Scopes:** `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`.
+- **The description:** lower-case start, no full stop, under about 72 characters.
+- **Issues:** issue titles use the same form, worded as the result the fix delivers.
+- **PRs:** one issue per PR, squash-merged, with `Closes #NN` in the description.
+- **Breaking changes:** add `!` after the type or scope.
 
-## History
+Every PR says what desktop, mobile and MCP need to do about it.
 
-Core moved here from [DashyNMS/desktop](https://github.com/DashyNMS/desktop) in October 2026 (desktop#248), with its history. Issue numbers in older comments and commits (`#169`, `#266`…) refer to DashyNMS/desktop.
+## Help and feedback
 
-The package is `DashyNMS.Core`, but the assembly and namespaces are still `DesktopNMS.Core`. Renaming those is a separate, later breaking change.
+- Found a bug or have an idea? [Open an issue](https://github.com/DashyNMS/core/issues). Planned work is under the [milestones](https://github.com/DashyNMS/core/milestones).
+- Issue numbers in older code comments and commits (`#169`, `#266`…) refer to [DashyNMS/desktop](https://github.com/DashyNMS/desktop), where Core lived until October 2026 (desktop#248).
 
-## Licence
+---
 
-[MIT](LICENSE).
+<sub>DashyNMS isn't affiliated with LibreNMS, Graylog or Unimus, which are trademarks of their respective owners.<br>
+MIT licence: see [LICENSE](LICENSE).</sub>
