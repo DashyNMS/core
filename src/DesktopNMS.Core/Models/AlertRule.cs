@@ -54,7 +54,7 @@ public sealed class AlertRule
     /// <summary>
     /// LibreNMS 26.10+: notify, acknowledge and unmute each fault on its own
     /// - while a device's open faults stay within <see cref="MaxEntities"/>.
-    /// Null before 26.10. Read-only here; writing it is #11.
+    /// Null before 26.10. Written with <see cref="AlertRuleWriteRequest.SetPerEntity"/>.
     /// </summary>
     [JsonPropertyName("notify_per_entity")]
     public bool? NotifyPerEntity { get; set; }

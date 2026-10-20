@@ -1,0 +1,8 @@
+{
+    "status": "ok",
+    "rules": [
+        { "id": 3, "name": "Processor usage over 90%", "severity": "critical", "builder": "{\"condition\":\"AND\",\"rules\":[{\"id\":\"processors.processor_usage\",\"field\":\"processors.processor_usage\",\"type\":\"string\",\"input\":\"text\",\"operator\":\"greater\",\"value\":\"90\"}],\"valid\":true}", "query": "SELECT * FROM devices,processors WHERE (devices.device_id = ? AND devices.device_id = processors.device_id) AND processors.processor_usage > 90", "extra": {"mute":false,"count":-1,"delay":300,"invert":false,"interval":300,"recovery":true,"acknowledgement":true}, "disabled": 0, "invert_map": 0, "notify_per_entity": true, "max_entities": null, "devices": [], "groups": [], "locations": [] },
+        { "id": 50, "name": "Slow ping", "severity": "warning", "builder": "{\"condition\":\"AND\",\"rules\":[{\"id\":\"device_stats.ping_rtt_last\",\"field\":\"device_stats.ping_rtt_last\",\"type\":\"string\",\"input\":\"text\",\"operator\":\"greater\",\"value\":\"200\"}],\"valid\":true}", "query": "SELECT * FROM devices,device_stats WHERE (devices.device_id = ? AND devices.device_id = device_stats.device_id) AND device_stats.ping_rtt_last > 200", "extra": {"invert":false,"recovery":true,"acknowledgement":true}, "disabled": 0, "invert_map": 0, "notify_per_entity": false, "max_entities": 8, "devices": [], "groups": [], "locations": [] }
+    ],
+    "count": 2
+}

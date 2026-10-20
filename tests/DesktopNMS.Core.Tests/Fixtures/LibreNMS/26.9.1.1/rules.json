@@ -1,0 +1,7 @@
+{
+    "status": "ok",
+    "rules": [
+        { "id": 50, "name": "Slow ping", "severity": "warning", "builder": "{\"condition\":\"AND\",\"rules\":[{\"id\":\"devices.last_ping_timetaken\",\"field\":\"devices.last_ping_timetaken\",\"type\":\"string\",\"input\":\"text\",\"operator\":\"greater\",\"value\":\"200\"}],\"valid\":true}", "query": "SELECT * FROM devices WHERE (devices.device_id = ?) AND devices.last_ping_timetaken > 200", "extra": {"invert":false,"recovery":true,"acknowledgement":true}, "disabled": 0, "invert_map": 0, "devices": [], "groups": [], "locations": [] }
+    ],
+    "count": 1
+}

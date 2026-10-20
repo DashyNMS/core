@@ -94,6 +94,39 @@ public sealed class AlertRuleWriteRequest
     public List<int> Locations { get; set; } = new();
 
     /// <summary>
+    /// LibreNMS 26.10+: notify, acknowledge and unmute each fault on its own
+    /// (#11). Null leaves the rule's setting as it is - the handler only
+    /// touches it when the key is sent - so it's sent only when changed,
+    /// via <see cref="SetPerEntity"/>.
+    /// </summary>
+    [JsonPropertyName("notify_per_entity")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? NotifyPerEntity { get; set; }
+
+    /// <summary>
+    /// The per-entity limit. Not sent unless set, so an edit elsewhere keeps
+    /// it; <see cref="EntityLimit.Inherit"/> sends null, returning it to the
+    /// server's default.
+    /// </summary>
+    [JsonPropertyName("max_entities")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public EntityLimit MaxEntities { get; set; }
+
+    /// <summary>
+    /// Sets the per-entity choices, sending each only if it differs from
+    /// <paramref name="original"/> (null for a new rule), so an inherited
+    /// limit stays inherited and an unrelated edit leaves both alone.
+    /// </summary>
+    public AlertRuleWriteRequest SetPerEntity(AlertRule? original, bool notifyPerEntity, int? maxEntities)
+    {
+        NotifyPerEntity = notifyPerEntity != (original?.NotifyPerEntity ?? false) ? notifyPerEntity : null;
+
+        var limit = maxEntities is { } value ? Math.Max(1, value) : (int?)null;
+        MaxEntities = limit != original?.MaxEntities ? EntityLimit.Of(limit) : default;
+        return this;
+    }
+
+    /// <summary>
     /// A request that writes <paramref name="rule"/> back exactly as it is -
     /// the starting point for a single-field change (e.g. toggling
     /// <see cref="Disabled"/> from the rule list) that must not disturb

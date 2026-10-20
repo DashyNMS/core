@@ -23,6 +23,7 @@ public sealed class StorageVolume
 
     /// <summary>LibreNMS's own configured warning threshold for this volume, if set.</summary>
     [JsonPropertyName("storage_perc_warn")]
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseNullableDoubleConverter))]
     public double? WarningPercent { get; set; }
 
     [JsonPropertyName("storage_used")]
