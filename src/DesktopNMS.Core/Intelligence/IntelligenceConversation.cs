@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DesktopNMS.Core.Intelligence;
 
@@ -41,11 +43,18 @@ public interface IIntelligenceListener
 /// </remarks>
 public sealed class IntelligenceConversation
 {
-    /// <summary>The most tool-calling rounds one question may take.</summary>
-    public const int MaxToolRounds = 8;
+    /// <summary>The most rounds of lookups one question may take; one more request then answers from them (#382 in DashyNMS/desktop).</summary>
+    public const int MaxToolRounds = 16;
 
     /// <summary>The most tool calls one question may make in all.</summary>
-    public const int MaxToolCalls = 24;
+    public const int MaxToolCalls = 48;
+
+    /// <summary>Added to the last request once the lookups are used up.</summary>
+    internal const string LookupsUsedUp =
+        "# Lookups used up\nThis question has used all its lookups. Answer now from the results you have, and say in the [[update]] footer what you couldn't check.";
+
+    /// <summary>The output a call gets when the limit stops it running - every call needs one, or the next request is refused.</summary>
+    internal const string NotRun = "Not run: this question has used all its lookups.";
 
     /// <summary>The most characters one tool output adds to the history.</summary>
     public const int MaxToolOutputChars = 24_000;
@@ -56,11 +65,13 @@ public sealed class IntelligenceConversation
     private readonly IIntelligenceTools _tools;
     private readonly List<JsonNode> _history = new();
     private readonly object _historyLock = new();
+    private readonly ILogger _logger;
 
-    public IntelligenceConversation(ResponsesClient responses, IIntelligenceTools tools)
+    public IntelligenceConversation(ResponsesClient responses, IIntelligenceTools tools, ILogger? logger = null)
     {
         _responses = responses;
         _tools = tools;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     public bool IsEmpty { get { lock (_historyLock) return _history.Count == 0; } }
@@ -128,6 +139,9 @@ public sealed class IntelligenceConversation
         };
 
         var calls = 0;
+        var lookupRounds = 0;
+        var usedUp = false;
+        var used = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var round = 0; ; round++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -137,12 +151,19 @@ public sealed class IntelligenceConversation
             var body = new JsonObject
             {
                 ["model"] = model,
-                ["instructions"] = instructions,
+                ["instructions"] = usedUp ? instructions + "\n\n" + LookupsUsedUp : instructions,
                 ["input"] = input,
                 ["tools"] = toolDefinitions.DeepClone(),
                 ["include"] = new JsonArray("reasoning.encrypted_content"),
                 ["parallel_tool_calls"] = true,
             };
+
+            // Out of lookups: the tools stay listed, since earlier calls name
+            // them, but the model may only answer.
+            if (usedUp)
+            {
+                body["tool_choice"] = "none";
+            }
 
             var pendingCalls = new List<JsonObject>();
             var searching = false;
@@ -209,37 +230,66 @@ public sealed class IntelligenceConversation
                 throw new IntelligenceException("The connection ended before ChatGPT finished. Try again.", IntelligenceFailure.Network);
             }
 
-            if (pendingCalls.Count == 0)
+            if (pendingCalls.Count == 0 || usedUp)
             {
+                // Calls asked for after the lookups ran out still need an output to keep the history valid.
+                foreach (var call in pendingCalls)
+                {
+                    turn.Add(Output(call, NotRun));
+                }
+
                 var answer = string.Join("\n\n", turn.OfType<JsonObject>()
                     .Where(item => item["type"]?.GetValue<string>() == "message")
                     .Select(WebSearchCitations.FormatMessage)
                     .Where(text => !string.IsNullOrWhiteSpace(text)));
+                if (string.IsNullOrEmpty(answer) && usedUp)
+                {
+                    throw new IntelligenceException("That needed more lookups than one question is allowed, and no answer came back from what was found. Try asking something narrower.", IntelligenceFailure.Tools);
+                }
+
                 if (!string.IsNullOrEmpty(answer)) listener.OnAnswerCompleted(answer);
                 lock (_historyLock) _history.AddRange(turn.Select(WithoutImages));
                 return;
             }
 
-            if (round + 1 >= MaxToolRounds || calls + pendingCalls.Count > MaxToolCalls)
+            // Runs what still fits; any calls over the limit get a "not run"
+            // output, and the next request answers from what was found.
+            var room = MaxToolCalls - calls;
+            for (var i = 0; i < pendingCalls.Count; i++)
             {
-                throw new IntelligenceException("That needed more lookups than one question is allowed. Try asking something narrower.", IntelligenceFailure.Tools);
-            }
+                var call = pendingCalls[i];
+                if (i >= room)
+                {
+                    turn.Add(Output(call, NotRun));
+                    continue;
+                }
 
-            foreach (var call in pendingCalls)
-            {
                 cancellationToken.ThrowIfCancellationRequested();
                 calls++;
-                var callId = call["call_id"]?.GetValue<string>() ?? string.Empty;
-                var output = await RunAsync(call, known, listener, cancellationToken).ConfigureAwait(false);
-                turn.Add(new JsonObject
-                {
-                    ["type"] = "function_call_output",
-                    ["call_id"] = callId,
-                    ["output"] = output,
-                });
+                var name = ToolName(call["name"]?.GetValue<string>()) ?? "unknown";
+                used[name] = used.GetValueOrDefault(name) + 1;
+                turn.Add(Output(call, await RunAsync(call, known, listener, cancellationToken).ConfigureAwait(false)));
+            }
+
+            lookupRounds++;
+            if (lookupRounds >= MaxToolRounds || calls >= MaxToolCalls)
+            {
+                usedUp = true;
+
+                // Names and counts only - arguments can carry device names and addresses.
+                _logger.LogInformation(
+                    "Intelligence: a question used all its lookups ({Calls} calls in {Rounds} rounds; {Tools})",
+                    calls, lookupRounds, string.Join(", ", used.OrderByDescending(u => u.Value).Select(u => $"{u.Key} x{u.Value}")));
             }
         }
     }
+
+    private static JsonObject Output(JsonObject call, JsonNode output) => new()
+    {
+        ["type"] = "function_call_output",
+        ["call_id"] = call["call_id"]?.GetValue<string>() ?? string.Empty,
+        ["output"] = output,
+    };
 
     /// <summary>
     /// A finished turn as kept for later questions: graph images become a

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 
 namespace DesktopNMS.Core.Intelligence;
 
@@ -19,7 +20,9 @@ internal static class IntelligenceInstructions
     {
         var blocks = new List<string>
         {
-            Block("base"),
+            Block("base")
+                .Replace("{max_calls}", IntelligenceConversation.MaxToolCalls.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
+                .Replace("{max_rounds}", IntelligenceConversation.MaxToolRounds.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal),
             Block(IntelligenceReplyStyles.Normalize(replyStyle) == IntelligenceReplyStyles.EvidenceBased ? "evidence-based" : "conversational"),
         };
         if (spotlight is not null)
