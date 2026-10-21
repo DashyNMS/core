@@ -26,6 +26,7 @@
        sources itself (mobile's DesktopNMS.Core.Portable) needs the same item. -->
   <ItemGroup>
     <EmbeddedResource Include="Licences\Texts\*.txt" LogicalName="DesktopNMS.Core.Licences.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Intelligence\Instructions\*.md" LogicalName="DesktopNMS.Core.Intelligence.Instructions.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
