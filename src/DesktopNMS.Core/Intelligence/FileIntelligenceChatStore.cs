@@ -43,16 +43,7 @@ public sealed class FileIntelligenceChatStore(string root, Func<byte[], byte[]> 
             var statePath = Path.Combine(directory, "active.dat");
             if (File.Exists(statePath))
             {
-                try
-                {
-                    var data = Read(statePath);
-                    try { active = JsonSerializer.Deserialize<Guid>(data); }
-                    finally { Array.Clear(data); }
-                }
-                catch (Exception)
-                {
-                    // Only which chat was open: the next save writes it again.
-                }
+                active = ReadActive(statePath);
             }
 
             return new(active, chats.OrderByDescending(chat => chat.IsPinned).ThenByDescending(chat => chat.UpdatedAt).ToList(), unreadable);
@@ -72,7 +63,15 @@ public sealed class FileIntelligenceChatStore(string root, Func<byte[], byte[]> 
 
     public void Delete(string scope, Guid id)
     {
-        lock (_sync) File.Delete(Path.Combine(DirectoryFor(scope), id.ToString("N") + ".chat"));
+        lock (_sync)
+        {
+            var directory = DirectoryFor(scope);
+            File.Delete(Path.Combine(directory, id.ToString("N") + ".chat"));
+
+            // A deleted chat is no longer the one to reopen.
+            var statePath = Path.Combine(directory, "active.dat");
+            if (File.Exists(statePath) && ReadActive(statePath) == id) File.Delete(statePath);
+        }
     }
 
     private string DirectoryFor(string scope)
@@ -98,6 +97,21 @@ public sealed class FileIntelligenceChatStore(string root, Func<byte[], byte[]> 
     {
         try { File.Move(file, file + ".bad", overwrite: true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>The chat that was open, or null when it can't be read - that only loses which chat was open; the next save writes it again.</summary>
+    private Guid? ReadActive(string statePath)
+    {
+        try
+        {
+            var data = Read(statePath);
+            try { return JsonSerializer.Deserialize<Guid>(data); }
+            finally { Array.Clear(data); }
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private byte[] Read(string path) => unprotect(File.ReadAllBytes(path));
