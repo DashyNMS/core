@@ -97,16 +97,8 @@ public sealed class IntelligenceConversation
         }
     }
 
-    /// <summary>
-    /// Answers one question. <paramref name="accessToken"/> is asked for
-    /// before each request, so a long investigation picks up a renewed token.
-    /// </summary>
-    /// <param name="spotlight">
-    /// What the user has narrowed the conversation to ("the device core-sw-01",
-    /// "the device group Core"), or null for the whole network. The model is
-    /// told to keep its lookups there.
-    /// </param>
-    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, string? spotlight = null, bool webSearchEnabled = false, string? replyStyle = null)
+    /// <summary>What the model is told for one answer: the standing instructions, then the reply style, Spotlight and shared policies.</summary>
+    internal static string BuildInstructions(string? replyStyle, string? spotlight = null)
     {
         var instructions = spotlight is null
             ? Instructions
@@ -139,9 +131,14 @@ public sealed class IntelligenceConversation
         instructions += " In either reply style, retain source citations, distinguish observations from inference, and state important uncertainty. " +
                         "Never infer a shared cause or dependency from simultaneous alerts alone. Do not invent counts, times, sources or severity indicators.";
         instructions += " An alert's age is not necessarily the duration of a device outage: say how long the alert has been open unless outage history confirms the duration. ";
+        instructions += " On LibreNMS 26.10 and later, one alert is a rule firing on a device and may hold several faults, one per core, port, sensor or other entity it matched. " +
+                        "Count alerts and faults separately, exactly as the tools' totals give them; never count each fault as a separate alert. " +
+                        "One fault clearing is not the alert recovering: an alert recovers only when its last fault clears. " +
+                        "Partly acknowledged means some faults are acknowledged and others are not. " +
+                        "Totals cover only what this LibreNMS account can see: say so when it matters, and treat a source the tools report as denied or failed as unknown, never as none. ";
         instructions += " The desktop renders inline UI markers inside your prose and lists. " +
                         "When naming a specific device returned by a tool, write [[device:123]] in place of its name, using its actual device_id. " +
-                        "When naming a specific returned alert, write [[alert:456]] using its actual alert_id. " +
+                        "When naming a specific returned alert, write [[alert:456]] using its actual alert_id; for one fault of an alert, use that fault's fault_id the same way. " +
                         "The app resolves these markers to the verified object name and a status indicator. Never invent IDs or reuse IDs from another conversation. " +
                         "For status or severity labels in summaries, use [[status:up]], [[status:down]], [[status:disabled]], [[status:unknown]], " +
                         "[[severity:critical]], [[severity:warning]] or [[severity:ok]] at the point where that label belongs. " +
@@ -189,6 +186,21 @@ public sealed class IntelligenceConversation
                         "When neither condition applies, omit the recommendation marker and paragraph entirely, " +
                         "and do not replace them with unsolicited 'next steps' or an automatic offer to investigate further. " +
                         "When advice is warranted, tie each suggested action to the observations and their uncertainty.";
+        return instructions;
+    }
+
+    /// <summary>
+    /// Answers one question. <paramref name="accessToken"/> is asked for
+    /// before each request, so a long investigation picks up a renewed token.
+    /// </summary>
+    /// <param name="spotlight">
+    /// What the user has narrowed the conversation to ("the device core-sw-01",
+    /// "the device group Core"), or null for the whole network. The model is
+    /// told to keep its lookups there.
+    /// </param>
+    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, string? spotlight = null, bool webSearchEnabled = false, string? replyStyle = null)
+    {
+        var instructions = BuildInstructions(replyStyle, spotlight);
 
         var tools = await _tools.GetToolsAsync(cancellationToken).ConfigureAwait(false);
         var toolDefinitions = BuildTools(tools);

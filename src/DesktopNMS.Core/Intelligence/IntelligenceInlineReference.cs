@@ -19,6 +19,14 @@ public static class IntelligenceInlineReferences
             }
             if (row.AlertId is { } alertId && !string.IsNullOrWhiteSpace(row.AlertRule))
                 yield return new("alert:" + alertId, AlertLabel(row.AlertRule, row.Status), row.Status, row.Tone, snapshot.ObservedAt, row.Name + " · " + row.Detail);
+
+            // Each listed fault of a group (LibreNMS 26.10, desktop#354): "CPU 3" by its own fault ID.
+            foreach (var fault in row.Faults ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(row.AlertRule) || fault.Id == row.AlertId) continue;
+                var label = AlertLabel(row.AlertRule, row.Status) + (fault.Entity is { } entity ? " · " + entity : "");
+                yield return new("alert:" + fault.Id, label, row.Status, row.Tone, snapshot.ObservedAt, row.Name + " · " + fault.State);
+            }
         }
     }
 
