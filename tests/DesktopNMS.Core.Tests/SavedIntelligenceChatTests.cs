@@ -18,10 +18,10 @@ public sealed class SavedIntelligenceChatTests : IDisposable
         var store = Store();
         var chat = new SavedIntelligenceChat
         {
-            Title = "Core switch", IsRenamed = true, Model = "test-model", Outfit = DashyOutfit.Wizard, ReplyStyle = IntelligenceReplyStyles.EvidenceBased,
+            Title = "Core switch", IsRenamed = true, Model = "test-model", Outfit = DashyOutfit.Wizard, ReplyStyle = IntelligenceDetail.Detailed,
             Draft = "What about the ports?",
             History = JsonNode.Parse("""[{"type":"reasoning","encrypted_content":"opaque"},{"type":"function_call","call_id":"1","name":"network_overview","arguments":"{}"},{"type":"function_call_output","call_id":"1","output":"Device health"}]""")!.AsArray(),
-            Messages = new() { new() { IsUser = false, Text = "Healthy", Activity = "Looked at device health", ReplyStyle = IntelligenceReplyStyles.Conversational, Images = new() { new(new byte[] { 1, 2, 3 }, "image/png") } } },
+            Messages = new() { new() { IsUser = false, Text = "Healthy", Activity = "Looked at device health", ReplyStyle = IntelligenceDetail.Balanced, Images = new() { new(new byte[] { 1, 2, 3 }, "image/png") } } },
             Spotlight = new() { new(0, 12, "core-switch") }, LookedAt = new() { "device health" },
         };
         var second = new SavedIntelligenceChat { Title = "Different chat", Outfit = DashyOutfit.Bowtie };
@@ -42,7 +42,7 @@ public sealed class SavedIntelligenceChatTests : IDisposable
         Assert.Equal(chat.Title, restored.Title);
         Assert.Equal(chat.Draft, restored.Draft);
         Assert.Equal(chat.Model, restored.Model);
-        Assert.Equal(IntelligenceReplyStyles.EvidenceBased, restored.ReplyStyle);
+        Assert.Equal(IntelligenceDetail.Detailed, restored.ReplyStyle);
         Assert.Equal(chat.Messages[0].CreatedAt, restored.Messages[0].CreatedAt);
         Assert.Equal(IntelligenceReplyOutcome.Failed, restored.Messages[0].Outcome);
         Assert.Equal("How is the switch?", restored.Messages[0].SubmittedQuestion);
@@ -51,7 +51,7 @@ public sealed class SavedIntelligenceChatTests : IDisposable
         Assert.Equal(DashyOutfit.Wizard, restored.Outfit);
         Assert.Equal(chat.History.ToJsonString(), restored.History.ToJsonString());
         Assert.Equal(chat.Messages[0].Images[0].Data, restored.Messages[0].Images[0].Data);
-        Assert.Equal(IntelligenceReplyStyles.Conversational, restored.Messages[0].ReplyStyle);
+        Assert.Equal(IntelligenceDetail.Balanced, restored.Messages[0].ReplyStyle);
         var card = Assert.Single(restored.Messages[0].StatusCards);
         Assert.Equal("Up", Assert.Single(card.Rows).Status);
         Assert.Equal(chat.Messages[0].StatusCards[0].ObservedAt, card.ObservedAt);

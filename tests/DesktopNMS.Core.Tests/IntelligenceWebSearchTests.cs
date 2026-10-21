@@ -94,32 +94,33 @@ public sealed class IntelligenceWebSearchTests
     }
 
     [Theory]
-    [InlineData(null, "Conversational")]
-    [InlineData("conversational", "Conversational")]
-    [InlineData("evidence-based", "Evidence based")]
-    [InlineData("unknown-style", "Conversational")]
-    public async Task Reply_style_is_applied_without_changing_tools_or_evidence_requirements(string? style, string expected)
+    [InlineData(null, "Balanced")]
+    [InlineData("conversational", "Balanced")]
+    [InlineData("evidence-based", "Detailed")]
+    [InlineData("unknown-style", "Balanced")]
+    [InlineData(IntelligenceDetail.Brief, "Brief")]
+    [InlineData(IntelligenceDetail.Full, "Full report")]
+    public async Task The_detail_level_is_applied_without_changing_tools_or_evidence_requirements(string? style, string expected)
     {
         var handler = new ScriptedHandler(Stream("""{"type":"response.completed"}"""));
         var conversation = new IntelligenceConversation(new ResponsesClient(new HttpClient(handler)), new NetworkTools());
         await conversation.AskAsync("Network health?", "test-model", Token, new Listener(), CancellationToken.None,
-            spotlight: "device test-device", webSearchEnabled: true, replyStyle: style);
+            spotlight: "device test-device", webSearchEnabled: true, detail: style);
         var instructions = handler.Bodies[0]["instructions"]!.GetValue<string>();
-        Assert.Contains("Reply style: " + expected, instructions);
-        if (expected == "Conversational")
+        Assert.Contains("# Detail: " + expected, instructions);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(instructions, "# Detail: "));
+        Assert.Contains("even if earlier answers", instructions);
+        if (expected == "Balanced")
         {
             Assert.Contains("tables, headings or full inventories only when the user explicitly asks", instructions);
-            Assert.Contains("even if earlier answers", instructions);
-            Assert.DoesNotContain("Reply style: Evidence based", instructions);
         }
-        else
+        else if (expected == "Detailed")
         {
             Assert.Contains("one compact bullet per category, metric or finding", instructions);
             Assert.Contains("Category: count · severity", instructions);
             Assert.Contains("for changes, one change per bullet", instructions);
-            Assert.Contains("Label figures you couldn't refresh as earlier observations", instructions);
+            Assert.Contains("label figures you couldn't refresh as earlier observations", instructions);
             Assert.Contains("Use a table only when the user asks for one", instructions);
-            Assert.DoesNotContain("Reply style: Conversational", instructions);
         }
         Assert.Contains("say which devices, ports, alerts or log lines the answer rests on", instructions);
         Assert.Contains("Keep what you observed apart from what you infer, and state uncertainty that matters", instructions);
@@ -137,8 +138,10 @@ public sealed class IntelligenceWebSearchTests
     }
 
     [Theory]
-    [InlineData(IntelligenceReplyStyles.Conversational)]
-    [InlineData(IntelligenceReplyStyles.EvidenceBased)]
+    [InlineData(IntelligenceDetail.Brief)]
+    [InlineData(IntelligenceDetail.Balanced)]
+    [InlineData(IntelligenceDetail.Detailed)]
+    [InlineData(IntelligenceDetail.Full)]
     public void Only_the_blocks_that_apply_are_sent_and_they_stay_within_budget(string style)
     {
         var plain = IntelligenceConversation.BuildInstructions(style);
@@ -187,20 +190,22 @@ public sealed class IntelligenceWebSearchTests
         var conversation = new IntelligenceConversation(new ResponsesClient(new HttpClient(handler)), new NetworkTools());
         await conversation.AskAsync("First question", "test-model", Token, new Listener(), CancellationToken.None);
         await conversation.AskAsync("Follow-up", "test-model", Token, new Listener(), CancellationToken.None,
-            replyStyle: IntelligenceReplyStyles.EvidenceBased);
-        Assert.Contains("Reply style: Evidence based", handler.Bodies[1]["instructions"]!.GetValue<string>());
+            detail: IntelligenceDetail.Detailed);
+        Assert.Contains("# Detail: Detailed", handler.Bodies[1]["instructions"]!.GetValue<string>());
         Assert.Contains("First question", handler.Bodies[1]["input"]!.ToJsonString());
         Assert.Contains("Follow-up", handler.Bodies[1]["input"]!.ToJsonString());
     }
 
     [Theory]
-    [InlineData(IntelligenceReplyStyles.Conversational)]
-    [InlineData(IntelligenceReplyStyles.EvidenceBased)]
-    public async Task Both_styles_make_recommendations_conditional_on_user_intent_or_a_required_follow_up(string style)
+    [InlineData(IntelligenceDetail.Brief)]
+    [InlineData(IntelligenceDetail.Balanced)]
+    [InlineData(IntelligenceDetail.Detailed)]
+    [InlineData(IntelligenceDetail.Full)]
+    public async Task Every_level_makes_recommendations_conditional_on_user_intent_or_a_required_follow_up(string style)
     {
         var handler = new ScriptedHandler(Stream("""{"type":"response.completed"}"""));
         var conversation = new IntelligenceConversation(new ResponsesClient(new HttpClient(handler)), new NetworkTools());
-        await conversation.AskAsync("Compare these configs", "test-model", Token, new Listener(), CancellationToken.None, replyStyle: style);
+        await conversation.AskAsync("Compare these configs", "test-model", Token, new Listener(), CancellationToken.None, detail: style);
         var instructions = handler.Bodies[0]["instructions"]!.GetValue<string>();
         Assert.Contains("Recommendations are conditional, never a default ending", instructions);
         Assert.Contains("user asks for advice, diagnosis or troubleshooting", instructions);
@@ -214,10 +219,10 @@ public sealed class IntelligenceWebSearchTests
     [Fact]
     public void Reply_style_defaults_for_older_settings_and_survives_clone_and_serialization()
     {
-        Assert.Equal(IntelligenceReplyStyles.Conversational, JsonSerializer.Deserialize<AppSettings>("{}")!.IntelligenceReplyStyle);
-        var settings = new AppSettings { IntelligenceReplyStyle = IntelligenceReplyStyles.EvidenceBased };
-        Assert.Equal(IntelligenceReplyStyles.EvidenceBased, settings.Clone().IntelligenceReplyStyle);
-        Assert.Equal(IntelligenceReplyStyles.EvidenceBased,
+        Assert.Equal(IntelligenceDetail.Balanced, JsonSerializer.Deserialize<AppSettings>("{}")!.IntelligenceReplyStyle);
+        var settings = new AppSettings { IntelligenceReplyStyle = IntelligenceDetail.Detailed };
+        Assert.Equal(IntelligenceDetail.Detailed, settings.Clone().IntelligenceReplyStyle);
+        Assert.Equal(IntelligenceDetail.Detailed,
             JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(settings))!.IntelligenceReplyStyle);
     }
 
@@ -296,6 +301,18 @@ public sealed class IntelligenceWebSearchTests
 
     private static string Message(string text)
         => $$$"""{"type":"response.output_item.done","item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{{{text}}}"}]}}""";
+    [Theory]
+    [InlineData("conversational", IntelligenceDetail.Balanced)]
+    [InlineData("evidence-based", IntelligenceDetail.Detailed)]
+    [InlineData(null, IntelligenceDetail.Balanced)]
+    [InlineData("", IntelligenceDetail.Balanced)]
+    [InlineData("loud", IntelligenceDetail.Balanced)]
+    [InlineData(IntelligenceDetail.Brief, IntelligenceDetail.Brief)]
+    [InlineData(IntelligenceDetail.Full, IntelligenceDetail.Full)]
+    public void Old_reply_styles_and_unknown_values_map_to_a_detail_level(string? stored, string expected)
+    {
+        Assert.Equal(expected, IntelligenceDetail.Normalize(stored));
+    }
     private static Task<string> Token(CancellationToken _) => Task.FromResult("test-token");
     private static string Stream(params string[] events) => string.Join("", events.Select(e => "data: " + e + "\n\n"));
 

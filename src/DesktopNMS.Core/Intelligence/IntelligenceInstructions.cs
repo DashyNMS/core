@@ -6,7 +6,7 @@ namespace DesktopNMS.Core.Intelligence;
 /// <summary>
 /// The model's instructions (#324 in DashyNMS/desktop), kept as embedded text
 /// in Instructions/*.md so they read as a document and can be reviewed as one.
-/// Each answer gets the base block, its reply style's block, and the Spotlight
+/// Each answer gets the base block, its detail level's block, and the Spotlight
 /// and web search blocks only when they apply - every line is sent with every
 /// round of every question, so nothing is sent that doesn't bear on it.
 /// </summary>
@@ -16,14 +16,14 @@ internal static class IntelligenceInstructions
 
     private static readonly ConcurrentDictionary<string, string> Blocks = new(StringComparer.Ordinal);
 
-    public static string Build(string? replyStyle, string? spotlight, bool webSearchEnabled)
+    public static string Build(string? detail, string? spotlight, bool webSearchEnabled)
     {
         var blocks = new List<string>
         {
             Block("base")
                 .Replace("{max_calls}", IntelligenceConversation.MaxToolCalls.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
                 .Replace("{max_rounds}", IntelligenceConversation.MaxToolRounds.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal),
-            Block(IntelligenceReplyStyles.Normalize(replyStyle) == IntelligenceReplyStyles.EvidenceBased ? "evidence-based" : "conversational"),
+            Block(IntelligenceDetail.Normalize(detail)),
         };
         if (spotlight is not null)
         {
