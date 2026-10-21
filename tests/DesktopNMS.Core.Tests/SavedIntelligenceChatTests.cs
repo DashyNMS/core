@@ -88,6 +88,22 @@ public sealed class SavedIntelligenceChatTests : IDisposable
     }
 
     [Fact]
+    public void Deleting_the_active_chat_forgets_it_and_deleting_another_keeps_it()
+    {
+        var store = Store();
+        var other = new SavedIntelligenceChat();
+        var active = new SavedIntelligenceChat();
+        store.Save("scope", other);
+        store.Save("scope", active);
+
+        store.Delete("scope", other.Id);
+        Assert.Equal(active.Id, store.Load("scope").ActiveId);
+
+        store.Delete("scope", active.Id);
+        Assert.Null(store.Load("scope").ActiveId);
+    }
+
+    [Fact]
     public void Failed_replacement_does_not_destroy_the_last_good_chat()
     {
         var store = Store();

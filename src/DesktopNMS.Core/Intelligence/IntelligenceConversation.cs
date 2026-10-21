@@ -87,6 +87,12 @@ public sealed class IntelligenceConversation
         lock (_historyLock) return new JsonArray(_history.Select(item => item.DeepClone()).ToArray());
     }
 
+    /// <summary>The history so far, then this turn's items, copied once for a request's input.</summary>
+    private JsonArray HistoryWith(IEnumerable<JsonNode> turn)
+    {
+        lock (_historyLock) return new JsonArray(_history.OfType<JsonObject>().Concat(turn).Select(item => item.DeepClone()).ToArray());
+    }
+
     /// <summary>Restore only when no turn is running.</summary>
     public void RestoreHistory(JsonArray history)
     {
@@ -231,11 +237,7 @@ public sealed class IntelligenceConversation
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var input = new JsonArray();
-            foreach (var item in ExportHistory().OfType<JsonObject>().Concat(turn))
-            {
-                input.Add(item.DeepClone());
-            }
+            var input = HistoryWith(turn);
 
             var body = new JsonObject
             {

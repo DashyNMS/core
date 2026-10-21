@@ -26,7 +26,8 @@ public interface IDeviceCache
     /// <summary>True once a device list has been fetched at least once.</summary>
     bool IsLoaded { get; }
 
-    DateTimeOffset? LastRefreshed => null;
+    /// <summary>When the device list was last fetched, or null before the first.</summary>
+    DateTimeOffset? LastRefreshed { get; }
 
     /// <summary>
     /// The device whose IP, hostname or sysName is <paramref name="address"/>,
