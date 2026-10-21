@@ -239,6 +239,63 @@ public sealed class IntelligenceWebSearchTests
         Assert.Equal("8 devices up and 2 down.", Assert.Single(listener.ToolObservations).Summary);
     }
 
+    [Fact]
+    public async Task A_question_that_keeps_looking_things_up_still_gets_an_answer()
+    {
+        // The model asks for a lookup every round; after the last allowed
+        // round, one more request withholds the tools and gets the answer.
+        var rounds = Enumerable.Range(0, IntelligenceConversation.MaxToolRounds)
+            .Select(i => Stream(Call($"call_{i}"), """{"type":"response.completed"}"""))
+            .Append(Stream(Message("Partial answer from what was found."), """{"type":"response.completed"}"""))
+            .ToArray();
+        var handler = new ScriptedHandler(rounds);
+        var tools = new NetworkTools();
+        var listener = new Listener();
+        var conversation = new IntelligenceConversation(new ResponsesClient(new HttpClient(handler)), tools);
+
+        await conversation.AskAsync("Check everything", "test-model", Token, listener, CancellationToken.None);
+
+        Assert.Equal("Partial answer from what was found.", listener.Answer);
+        Assert.Equal(IntelligenceConversation.MaxToolRounds, tools.Calls);
+        var last = handler.Bodies[^1];
+        Assert.Equal("none", last["tool_choice"]!.GetValue<string>());
+        Assert.Contains("used all its lookups", last["instructions"]!.GetValue<string>());
+        Assert.All(handler.Bodies.SkipLast(1), body => Assert.Null(body["tool_choice"]));
+
+        // The finished turn is kept, so a follow-up has the lookups' results.
+        Assert.False(conversation.IsEmpty);
+    }
+
+    [Fact]
+    public async Task Calls_over_the_limit_are_answered_as_not_run_and_the_rest_still_run()
+    {
+        var batch = Enumerable.Range(0, IntelligenceConversation.MaxToolCalls + 5).Select(i => Call($"call_{i}")).Append("""{"type":"response.completed"}""").ToArray();
+        var handler = new ScriptedHandler(Stream(batch), Stream(Message("Answer."), """{"type":"response.completed"}"""));
+        var tools = new NetworkTools();
+        var conversation = new IntelligenceConversation(new ResponsesClient(new HttpClient(handler)), tools);
+
+        await conversation.AskAsync("Check everything", "test-model", Token, new Listener(), CancellationToken.None);
+
+        Assert.Equal(IntelligenceConversation.MaxToolCalls, tools.Calls);
+        var outputs = handler.Bodies[1]["input"]!.AsArray().OfType<JsonObject>().Where(i => i["type"]?.GetValue<string>() == "function_call_output").ToList();
+        Assert.Equal(IntelligenceConversation.MaxToolCalls + 5, outputs.Count);
+        Assert.Equal(5, outputs.Count(o => o["output"]?.ToJsonString().Contains("Not run", StringComparison.Ordinal) == true));
+        Assert.Equal("none", handler.Bodies[1]["tool_choice"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void The_model_is_told_its_lookup_budget()
+    {
+        var instructions = IntelligenceConversation.BuildInstructions(null);
+        Assert.Contains($"up to {IntelligenceConversation.MaxToolCalls} lookups in {IntelligenceConversation.MaxToolRounds} rounds", instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("{max_", instructions, StringComparison.Ordinal);
+    }
+
+    private static string Call(string id)
+        => $$$"""{"type":"response.output_item.done","item":{"type":"function_call","name":"network_overview","call_id":"{{{id}}}","arguments":"{}"}}""";
+
+    private static string Message(string text)
+        => $$$"""{"type":"response.output_item.done","item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{{{text}}}"}]}}""";
     private static Task<string> Token(CancellationToken _) => Task.FromResult("test-token");
     private static string Stream(params string[] events) => string.Join("", events.Select(e => "data: " + e + "\n\n"));
 
