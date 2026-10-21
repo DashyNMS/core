@@ -16,26 +16,46 @@ public sealed class FileIntelligenceChatStore(string root, Func<byte[], byte[]> 
         {
             var directory = DirectoryFor(scope);
             if (!Directory.Exists(directory)) return new(null, Array.Empty<SavedIntelligenceChat>());
-            var chats = Directory.EnumerateFiles(directory, "*.chat").Select(file =>
+            // Each file on its own (#322 in DashyNMS/desktop): one that won't
+            // decrypt or parse is skipped, not the end of every chat.
+            var chats = new List<SavedIntelligenceChat>();
+            var unreadable = new List<string>();
+            foreach (var file in Directory.EnumerateFiles(directory, "*.chat").ToList())
             {
-                var data = Read(file);
                 try
                 {
-                    var chat = JsonSerializer.Deserialize<SavedIntelligenceChat>(data) ?? throw new JsonException("Empty saved chat.");
-                    if (Path.GetFileNameWithoutExtension(file) != chat.Id.ToString("N")) throw new JsonException("Saved chat identity mismatch.");
-                    return chat;
+                    chats.Add(ReadChat(file));
                 }
-                finally { Array.Clear(data); }
-            }).OrderByDescending(chat => chat.IsPinned).ThenByDescending(chat => chat.UpdatedAt).ToList();
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Locked or out of reach for now - try again next time.
+                    unreadable.Add(Path.GetFileName(file));
+                }
+                catch (Exception)
+                {
+                    // Damaged for good: moved aside, so it isn't retried on every start.
+                    unreadable.Add(Path.GetFileName(file));
+                    SetAside(file);
+                }
+            }
+
             Guid? active = null;
             var statePath = Path.Combine(directory, "active.dat");
             if (File.Exists(statePath))
             {
-                var data = Read(statePath);
-                try { active = JsonSerializer.Deserialize<Guid>(data); }
-                finally { Array.Clear(data); }
+                try
+                {
+                    var data = Read(statePath);
+                    try { active = JsonSerializer.Deserialize<Guid>(data); }
+                    finally { Array.Clear(data); }
+                }
+                catch (Exception)
+                {
+                    // Only which chat was open: the next save writes it again.
+                }
             }
-            return new(active, chats);
+
+            return new(active, chats.OrderByDescending(chat => chat.IsPinned).ThenByDescending(chat => chat.UpdatedAt).ToList(), unreadable);
         }
     }
 
@@ -59,6 +79,25 @@ public sealed class FileIntelligenceChatStore(string root, Func<byte[], byte[]> 
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
         return Path.Combine(root, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scope))));
+    }
+
+    private SavedIntelligenceChat ReadChat(string file)
+    {
+        var data = Read(file);
+        try
+        {
+            var chat = JsonSerializer.Deserialize<SavedIntelligenceChat>(data) ?? throw new JsonException("Empty saved chat.");
+            if (Path.GetFileNameWithoutExtension(file) != chat.Id.ToString("N")) throw new JsonException("Saved chat identity mismatch.");
+            return chat;
+        }
+        finally { Array.Clear(data); }
+    }
+
+    /// <summary>Renames a damaged chat to <c>.chat.bad</c>, kept in case it can be recovered.</summary>
+    private static void SetAside(string file)
+    {
+        try { File.Move(file, file + ".bad", overwrite: true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     private byte[] Read(string path) => unprotect(File.ReadAllBytes(path));

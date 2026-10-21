@@ -100,6 +100,53 @@ public sealed class SavedIntelligenceChatTests : IDisposable
     }
 
     [Fact]
+    public void One_damaged_chat_is_set_aside_and_the_rest_still_load()
+    {
+        var store = Store();
+        var good = new SavedIntelligenceChat { Title = "Good" };
+        var damaged = new SavedIntelligenceChat { Title = "Damaged" };
+        var other = new SavedIntelligenceChat { Title = "Also good" };
+        store.Save("scope", good);
+        store.Save("scope", damaged);
+        store.Save("scope", other);
+        var directory = Path.GetDirectoryName(Directory.EnumerateFiles(_root, "*.chat", SearchOption.AllDirectories).First())!;
+        var file = Path.Combine(directory, damaged.Id.ToString("N") + ".chat");
+        File.WriteAllBytes(file, Transform(Encoding.UTF8.GetBytes("{ not a chat")));
+
+        var loaded = Store().Load("scope");
+
+        Assert.Equal(new[] { good.Id, other.Id }.OrderBy(id => id), loaded.Chats.Select(chat => chat.Id).OrderBy(id => id));
+        Assert.Equal(other.Id, loaded.ActiveId);
+        Assert.Equal(damaged.Id.ToString("N") + ".chat", Assert.Single(loaded.Unreadable!));
+        Assert.False(File.Exists(file));
+        Assert.True(File.Exists(file + ".bad"));
+
+        // Not retried next time, and the store still saves.
+        store.Save("scope", new SavedIntelligenceChat { Title = "New" });
+        var again = Store().Load("scope");
+        Assert.Empty(again.Unreadable!);
+        Assert.Equal(3, again.Chats.Count);
+    }
+
+    [Fact]
+    public void A_chat_that_wont_decrypt_doesnt_stop_the_others()
+    {
+        var store = Store();
+        var good = new SavedIntelligenceChat { Title = "Good" };
+        store.Save("scope", good);
+        var directory = Path.GetDirectoryName(Directory.EnumerateFiles(_root, "*.chat", SearchOption.AllDirectories).First())!;
+        File.WriteAllBytes(Path.Combine(directory, Guid.NewGuid().ToString("N") + ".chat"), new byte[] { 0xFF });
+        File.WriteAllBytes(Path.Combine(directory, "active.dat"), new byte[] { 0xFF });
+
+        var unprotectRejectsJunk = new FileIntelligenceChatStore(_root, Transform,
+            data => data.Length == 1 ? throw new System.Security.Cryptography.CryptographicException("Bad data") : Transform(data));
+        var loaded = unprotectRejectsJunk.Load("scope");
+
+        Assert.Equal(good.Id, Assert.Single(loaded.Chats).Id);
+        Assert.Null(loaded.ActiveId);
+        Assert.Single(loaded.Unreadable!);
+    }
+    [Fact]
     public void Pinning_another_chat_sorts_it_first_without_changing_the_active_chat()
     {
         var store = Store();
