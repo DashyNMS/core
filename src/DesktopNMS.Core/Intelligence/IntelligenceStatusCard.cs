@@ -5,7 +5,14 @@ namespace DesktopNMS.Core.Intelligence;
 /// <summary>A bounded batch of typed lookup observations. Kept as evidence, never displayed as a separate card.</summary>
 public sealed record IntelligenceStatusCard(string Title, string Scope, DateTimeOffset ObservedAt, IReadOnlyList<IntelligenceStatusRow> Rows);
 
-public sealed record IntelligenceStatusRow(string Name, string Detail, string Status, string Tone, string DeviceStatus = "", int? DeviceId = null, string? AlertRule = null, string? Hostname = null, int? AlertId = null);
+public sealed record IntelligenceStatusRow(string Name, string Detail, string Status, string Tone, string DeviceStatus = "", int? DeviceId = null, string? AlertRule = null, string? Hostname = null, int? AlertId = null, IReadOnlyList<IntelligenceFaultRef>? Faults = null);
+
+/// <summary>
+/// One fault of an alert group, as the MCP server lists it on LibreNMS 26.10
+/// (DashyNMS/desktop#354) - so an answer's [[alert:ID]] can name a fault the
+/// tools returned, not only the group's first.
+/// </summary>
+public sealed record IntelligenceFaultRef(int Id, string? Entity, string State);
 
 public static class IntelligenceStatusCards
 {
@@ -29,7 +36,11 @@ public static class IntelligenceStatusCards
                 if (Identifier(alert, "alert_id") is not { } alertId) return [];
                 var severity = Severity(Text(alert, "severity"));
                 var ruleName = Clean(Text(rule, "name") ?? "Alert");
-                rows.Add(new(Name(device), ruleName + " · " + AlertState(Text(alert, "state")), severity.Label, severity.Tone,
+
+                // On 26.10 the alert is one fault of a group: say which, and of how many.
+                var entity = Text(alert, "entity") is { } named ? " · " + Clean(named) : "";
+                var ofGroup = Number(Get(data, "group"), "fault_count") is > 1 and var count ? $" · one of {count} faults" : "";
+                rows.Add(new(Name(device), ruleName + entity + " · " + AlertState(Text(alert, "state")) + ofGroup, severity.Label, severity.Tone,
                     DeviceState(Text(device, "status")), Id(device), ruleName, Clean(Text(device, "hostname") ?? ""), alertId));
                 cards.Add(new("Alert details", "Individual alert lookup", observedAt, rows));
             }
@@ -46,15 +57,27 @@ public static class IntelligenceStatusCards
                         var state = AlertState(Text(alert, "state"));
                         var minutes = Number(alert, "age_minutes");
                         var age = minutes is { } m ? m >= 1440 ? $" · {m / 1440}d {m % 1440 / 60}h" : m >= 60 ? $" · {m / 60}h {m % 60}m" : $" · {m}m" : "";
-                        rows.Add(new(Name(device), Clean(Text(alert, "rule") ?? "Alert") + " · " + state + age,
+
+                        // One row per rule firing on a device (#354): its faults are counted, and named for [[alert:ID]].
+                        var faultCount = Number(alert, "fault_count");
+                        var what = faultCount is > 1 ? $" · {faultCount} faults" : Text(alert, "entity") is { } entity ? " · " + Clean(entity) : "";
+                        var faults = Items(Get(alert, "faults"))
+                            .Select(f => Identifier(f, "fault_id") is { } faultId ? new IntelligenceFaultRef(faultId, Text(f, "entity") is { } name ? Clean(name) : null, AlertState(Text(f, "state"))) : null)
+                            .OfType<IntelligenceFaultRef>()
+                            .ToList();
+                        rows.Add(new(Name(device), Clean(Text(alert, "rule") ?? "Alert") + what + " · " + state + age,
                             severity.Label, severity.Tone, DeviceState(Text(device, "device_status")), Id(device),
-                            Clean(Text(alert, "rule") ?? "Alert"), Clean(Text(device, "hostname") ?? ""), Identifier(alert, "alert_id")));
+                            Clean(Text(alert, "rule") ?? "Alert"), Clean(Text(device, "hostname") ?? ""), Identifier(alert, "alert_id"), faults.Count > 0 ? faults : null));
                     }
                     if (rows.Count >= MaxRows) break;
                 }
                 var total = Number(Get(data, "page"), "total");
                 var truncated = Get(root, "truncated").ValueKind == JsonValueKind.True;
-                var scope = total is { } count ? $"Showing {rows.Count} of {count} matching open alerts" : $"Showing {rows.Count} returned alerts · total unavailable";
+                var faultTotal = Number(Get(data, "totals"), "faults");
+                var scope = total is { } count
+                    ? $"Showing {rows.Count} of {count} matching open alerts" + (faultTotal is { } f && f > count ? $" ({f} faults)" : "")
+                    : $"Showing {rows.Count} returned alerts · total unavailable";
+                scope += " · visible to this account";
                 if (truncated) scope += " · tool result shortened";
                 // Empty is only authoritative if an explicit total says there are no matching alerts.
                 if (rows.Count > 0 || total == 0) cards.Add(new("Alert status", scope + " · includes acknowledged", observedAt, rows));
@@ -71,7 +94,8 @@ public static class IntelligenceStatusCards
                 AddCount(rows, alerts, "critical", "Critical alerts", "Critical", "critical");
                 AddCount(rows, alerts, "warning", "Warning alerts", "Warning", "warning");
                 AddCount(rows, alerts, "acknowledged", "Acknowledged alerts", "Acknowledged", "unknown");
-                if (rows.Count > 0) cards.Add(new("Alert status", "Network overview · includes acknowledged", observedAt, rows));
+                AddCount(rows, alerts, "partly_acknowledged", "Partly acknowledged alerts", "Partly acknowledged", "warning");
+                if (rows.Count > 0) cards.Add(new("Alert status", "Network overview · visible to this account · includes acknowledged", observedAt, rows));
             }
             else
             {
@@ -104,6 +128,6 @@ public static class IntelligenceStatusCards
     private static string Name(JsonElement device) => Clean(Text(device, "display") ?? Text(device, "hostname") ?? $"Device {Id(device)?.ToString() ?? "unknown"}");
     private static string Clean(string value) => new(value.Where(c => !char.IsControl(c)).Take(200).ToArray());
     private static string DeviceState(string? state) => state switch { "up" => "Up", "down" => "Down", "disabled" => "Disabled", _ => "Unknown" };
-    private static string AlertState(string? state) => state switch { "active" => "Active", "acknowledged" => "Acknowledged", "recovered" => "Recovered", _ => "State unknown" };
+    private static string AlertState(string? state) => state switch { "active" => "Active", "acknowledged" => "Acknowledged", "partly_acknowledged" => "Partly acknowledged", "recovered" => "Recovered", _ => "State unknown" };
     private static (string Label, string Tone) Severity(string? severity) => severity switch { "critical" => ("Critical", "critical"), "warning" => ("Warning", "warning"), "ok" => ("OK", "up"), _ => ("Unknown", "unknown") };
 }

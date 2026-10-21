@@ -110,4 +110,65 @@ public sealed class IntelligenceStatusCardTests
         Assert.Equal("Down", row.Status);
         Assert.Equal("down", row.Tone);
     }
+
+    [Fact]
+    public void A_group_of_faults_is_one_row_and_each_fault_is_a_marker()
+    {
+        // The MCP server's active_alerts on LibreNMS 26.10 (DashyNMS/desktop#354).
+        var card = Assert.Single(IntelligenceStatusCards.FromTool("active_alerts", """
+            {"status":"ok","data":{
+              "totals":{"alert_groups":2,"faults":9},
+              "devices":[{"device_id":7,"hostname":"core-sw-01","device_status":"up",
+                "alerts":[{"group_id":"device:7/rule:3","alert_id":9200,"rule":"Processor usage","severity":"critical","state":"partly_acknowledged",
+                  "fault_count":8,"age_minutes":30,
+                  "faults":[{"fault_id":9200,"entity":"CPU 0","state":"active"},{"fault_id":9203,"entity":"CPU 3","state":"acknowledged"}]}]}],
+              "page":{"total":2,"returned":1}}}
+            """, Observed));
+
+        Assert.Contains("1 of 2 matching open alerts (9 faults)", card.Scope);
+        Assert.Contains("visible to this account", card.Scope);
+        var row = Assert.Single(card.Rows);
+        Assert.Contains("8 faults", row.Detail);
+        Assert.Contains("Partly acknowledged", row.Detail);
+
+        var refs = IntelligenceInlineReferences.FromSnapshot(card).ToArray();
+        Assert.Equal("Processor usage", IntelligenceInlineMarkup.Resolve("[[alert:9200]]", refs)!.Name);
+        Assert.Equal("Processor usage · CPU 3", IntelligenceInlineMarkup.Resolve("[[alert:9203]]", refs)!.Name);
+    }
+
+    [Fact]
+    public void Details_of_one_fault_say_which_and_of_how_many()
+    {
+        var card = Assert.Single(IntelligenceStatusCards.FromTool("alert_details", """
+            {"status":"ok","data":{"alert":{"alert_id":9203,"entity":"CPU 3","state":"active","severity":"critical"},
+             "group":{"fault_count":8},
+             "device":{"device_id":7,"hostname":"core-sw-01","status":"up"},
+             "rule":{"name":"Processor usage"}}}
+            """, Observed));
+
+        Assert.Contains("CPU 3", card.Rows[0].Detail);
+        Assert.Contains("one of 8 faults", card.Rows[0].Detail);
+    }
+
+    [Fact]
+    public void The_overview_counts_partly_acknowledged_alerts_visible_to_this_account()
+    {
+        var cards = IntelligenceStatusCards.FromTool("network_overview", """
+            {"status":"ok","data":{"devices":{"up":5,"down":1},"alerts":{"open":3,"faults":11,"critical":2,"warning":1,"acknowledged":0,"partly_acknowledged":1}}}
+            """, Observed);
+
+        var alerts = cards.Single(c => c.Title == "Alert status");
+        Assert.Contains("visible to this account", alerts.Scope);
+        Assert.Contains(alerts.Rows, r => r.Name == "Partly acknowledged alerts" && r.Detail == "1");
+    }
+
+    [Fact]
+    public void The_instructions_explain_groups_faults_and_visibility()
+    {
+        var instructions = IntelligenceConversation.BuildInstructions(IntelligenceReplyStyles.Conversational);
+
+        Assert.Contains("Count alerts and faults separately", instructions, StringComparison.Ordinal);
+        Assert.Contains("only when its last fault clears", instructions, StringComparison.Ordinal);
+        Assert.Contains("this LibreNMS account can see", instructions, StringComparison.Ordinal);
+    }
 }
