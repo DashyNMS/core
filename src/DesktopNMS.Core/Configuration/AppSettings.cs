@@ -230,8 +230,15 @@ public sealed class AppSettings
 
     public bool IntelligenceColourStatusIndicators { get; set; } = true;
 
-    /// <summary>The "what's sent" notice was accepted, so it isn't shown again.</summary>
+    /// <summary>A "what's sent" notice was accepted - possibly an older one; <see cref="IntelligenceConsentVersion"/> says which.</summary>
     public bool IntelligenceConsentGiven { get; set; }
+
+    /// <summary>
+    /// Which version of the "what's sent" notice was accepted (#323 in
+    /// DashyNMS/desktop). 0 for one accepted before notices had versions;
+    /// the notice is shown again until <see cref="Intelligence.IntelligenceConsent.CurrentVersion"/> is accepted.
+    /// </summary>
+    public int IntelligenceConsentVersion { get; set; }
 
     /// <summary>The model a new conversation starts with (its slug); the first listed when unset or no longer offered.</summary>
     public string? IntelligenceModel { get; set; }
@@ -374,6 +381,7 @@ public sealed class AppSettings
         IntelligenceReplyStyle = IntelligenceReplyStyle,
         IntelligenceColourStatusIndicators = IntelligenceColourStatusIndicators,
         IntelligenceConsentGiven = IntelligenceConsentGiven,
+        IntelligenceConsentVersion = IntelligenceConsentVersion,
         IntelligenceModel = IntelligenceModel,
         IntelligenceConfigText = IntelligenceConfigText,
         RecentlyViewedDeviceCount = RecentlyViewedDeviceCount,
