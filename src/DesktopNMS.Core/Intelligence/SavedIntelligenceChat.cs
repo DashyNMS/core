@@ -10,6 +10,8 @@ public sealed class SavedIntelligenceChat
     public bool IsPinned { get; set; }
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public string? Model { get; set; }
+
+    /// <summary>The chat's detail level (<see cref="IntelligenceDetail"/>); older chats hold a reply style, which Normalize maps.</summary>
     public string? ReplyStyle { get; set; }
     public DashyOutfit Outfit { get; set; }
     public string Draft { get; set; } = string.Empty;
@@ -25,6 +27,8 @@ public sealed class SavedIntelligenceMessage
     public DateTimeOffset? CreatedAt { get; set; }
     public string Text { get; set; } = string.Empty;
     public string? Activity { get; set; }
+
+    /// <summary>The detail level the answer was asked for, as <see cref="SavedIntelligenceChat.ReplyStyle"/>.</summary>
     public string? ReplyStyle { get; set; }
     public List<IntelligenceStatusCard> StatusCards { get; set; } = new();
     public List<IntelligenceInlineReference> PriorReferences { get; set; } = new();

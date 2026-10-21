@@ -101,8 +101,8 @@ public sealed class IntelligenceConversation
     }
 
     /// <summary>What the model is told for one answer - see <see cref="IntelligenceInstructions"/>.</summary>
-    internal static string BuildInstructions(string? replyStyle, string? spotlight = null, bool webSearchEnabled = false)
-        => IntelligenceInstructions.Build(replyStyle, spotlight, webSearchEnabled);
+    internal static string BuildInstructions(string? detail, string? spotlight = null, bool webSearchEnabled = false)
+        => IntelligenceInstructions.Build(detail, spotlight, webSearchEnabled);
 
     /// <summary>
     /// Answers one question. <paramref name="accessToken"/> is asked for
@@ -113,9 +113,9 @@ public sealed class IntelligenceConversation
     /// "the device group Core"), or null for the whole network. The model is
     /// told to keep its lookups there.
     /// </param>
-    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, string? spotlight = null, bool webSearchEnabled = false, string? replyStyle = null)
+    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, string? spotlight = null, bool webSearchEnabled = false, string? detail = null)
     {
-        var instructions = BuildInstructions(replyStyle, spotlight, webSearchEnabled);
+        var instructions = BuildInstructions(detail, spotlight, webSearchEnabled);
 
         var tools = await _tools.GetToolsAsync(cancellationToken).ConfigureAwait(false);
         var toolDefinitions = BuildTools(tools);

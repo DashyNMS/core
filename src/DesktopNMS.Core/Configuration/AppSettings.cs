@@ -225,8 +225,12 @@ public sealed class AppSettings
     /// <summary>Allow current public information to be looked up using hosted web search.</summary>
     public bool IntelligenceWebSearchEnabled { get; set; } = true;
 
-    /// <summary>How Intelligence presents its next answer; applies to existing and new chats.</summary>
-    public string IntelligenceReplyStyle { get; set; } = IntelligenceReplyStyles.Conversational;
+    /// <summary>
+    /// The detail level a new chat starts with - see <see cref="IntelligenceDetail"/>. Named for the
+    /// reply styles it replaced (#329 in DashyNMS/desktop), so saved settings carry over; read it
+    /// through <see cref="IntelligenceDetail.Normalize"/>, which maps the old values.
+    /// </summary>
+    public string IntelligenceReplyStyle { get; set; } = IntelligenceDetail.Default;
 
     public bool IntelligenceColourStatusIndicators { get; set; } = true;
 

@@ -165,7 +165,7 @@ public sealed class IntelligenceStatusCardTests
     [Fact]
     public void The_instructions_explain_groups_faults_and_visibility()
     {
-        var instructions = IntelligenceConversation.BuildInstructions(IntelligenceReplyStyles.Conversational);
+        var instructions = IntelligenceConversation.BuildInstructions(IntelligenceDetail.Balanced);
 
         Assert.Contains("Count alerts and faults separately", instructions, StringComparison.Ordinal);
         Assert.Contains("only when its last fault clears", instructions, StringComparison.Ordinal);
