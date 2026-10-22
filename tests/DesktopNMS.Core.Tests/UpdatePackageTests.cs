@@ -77,6 +77,39 @@ public class UpdatePackageTests : IDisposable
         Assert.Equal("DashyNMS-Setup-1.2.0.exe", Path.GetFileName(path));
     }
 
+    [Theory]
+    [InlineData("win-x64", "DashyNMS-Setup-1.2.0.exe")]
+    [InlineData("osx-x64", "DashyNMS-1.2.0-osx-x64.dmg")]
+    [InlineData("osx-arm64", "DashyNMS-1.2.0-osx-arm64.dmg")]
+    [InlineData("linux-x64", "DashyNMS-1.2.0-linux-x64.AppImage")]
+    [InlineData("linux-arm64", "DashyNMS-1.2.0-linux-arm64.AppImage")]
+    public async Task A_native_package_matches_its_runtime_and_is_verified(string runtime, string name)
+    {
+        var asset = Asset(name: name);
+        var release = new GitHubRelease { TagName = "v1.2.0", Assets = { asset } };
+        Assert.Same(asset, UpdatePackage.FindForRuntime(release, runtime));
+        Assert.Null(UpdatePackage.FindForRuntime(release, "unsupported"));
+        using var http = new HttpClient(new FakeHandler(Installer));
+        var path = await UpdatePackage.DownloadAsync(http, asset, _directory);
+        Assert.Equal(Installer, await File.ReadAllBytesAsync(path));
+        using var wrong = new HttpClient(new FakeHandler(new byte[Installer.Length]));
+        File.Delete(path);
+        await Assert.ThrowsAsync<InvalidDataException>(() => UpdatePackage.DownloadAsync(wrong, asset, _directory));
+        Assert.Empty(Directory.EnumerateFiles(_directory));
+    }
+
+    [Theory]
+    [InlineData("DashyNMS-1.2.0-osx-x64.dmg", null, null)]
+    [InlineData("DashyNMS-1.3.0-osx-arm64.dmg", null, null)]
+    [InlineData("DashyNMS-1.2.0-osx-arm64.dmg", "https://example.net/package.dmg", null)]
+    [InlineData("DashyNMS-1.2.0-osx-arm64.dmg", "https://github.com/DashyNMS/desktop/releases/download/v1.1.0/DashyNMS-1.2.0-osx-arm64.dmg", null)]
+    [InlineData("DashyNMS-1.2.0-osx-arm64.dmg", null, "md5:abc")]
+    public void Wrong_architecture_version_origin_or_digest_is_not_offered(string name, string? url, string? digest)
+    {
+        var release = new GitHubRelease { TagName = "v1.2.0", Assets = { Asset(name: name, url: url, digest: digest) } };
+        Assert.Null(UpdatePackage.FindForRuntime(release, "osx-arm64"));
+    }
+
     [Fact]
     public async Task A_download_that_doesnt_match_its_SHA_256_is_thrown_away()
     {
