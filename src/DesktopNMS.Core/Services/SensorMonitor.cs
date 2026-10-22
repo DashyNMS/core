@@ -24,6 +24,11 @@ public sealed class SensorPollResult
     /// <summary>LibreNMS refused the token the sensors (403) - see <see cref="LibreNmsApiException.IsPermissionDenied"/>.</summary>
     public bool IsPermissionDenied { get; init; }
 
+    /// <summary>When these readings were taken, retained across failed refreshes.</summary>
+    public DateTimeOffset? ObservedAt { get; init; }
+
+    public bool IsTimeout { get; init; }
+
     public static SensorPollResult Failed(string message, bool isPermissionDenied = false) => new()
     {
         Succeeded = false,
@@ -53,6 +58,9 @@ public sealed class SensorMonitor : IDisposable
     private readonly ILogger<SensorMonitor> _logger;
     private readonly IAppActivity _activity;
     private DateTimeOffset _lastPolled = DateTimeOffset.MinValue;
+    private IReadOnlyList<Sensor> _lastGood = Array.Empty<Sensor>();
+    private DateTimeOffset? _lastGoodAt;
+    private LibreNmsConnection? _lastConnection;
 
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly SemaphoreSlim _pollGate = new(1, 1);
@@ -173,7 +181,7 @@ public sealed class SensorMonitor : IDisposable
         }
     }
 
-    private async Task PollOnceAsync(CancellationToken cancellationToken)
+    internal async Task PollOnceAsync(CancellationToken cancellationToken)
     {
         if (!_session.IsConnected)
         {
@@ -188,6 +196,14 @@ public sealed class SensorMonitor : IDisposable
 
         try
         {
+            var connection = _client.Connection;
+            if (!ReferenceEquals(connection, _lastConnection))
+            {
+                _lastGood = Array.Empty<Sensor>();
+                _lastGoodAt = null;
+                _lastConnection = connection;
+            }
+
             PollStarted?.Invoke(this, EventArgs.Empty);
 
             var sensors = await _client.Sensors.ListAsync(cancellationToken).ConfigureAwait(false);
@@ -202,11 +218,18 @@ public sealed class SensorMonitor : IDisposable
 
             _logger.LogDebug("Polled {Count} sensors", sensors.Count);
 
+            // A sign-out or server switch while the request was in flight
+            // mustn't publish another connection's readings.
+            if (!ReferenceEquals(connection, _client.Connection)) return;
+            _lastGood = sensors;
+            _lastGoodAt = DateTimeOffset.Now;
+
             Polled?.Invoke(this, new SensorPollResult
             {
                 Succeeded = true,
                 Sensors = sensors,
-                CompletedAt = DateTimeOffset.Now,
+                CompletedAt = _lastGoodAt.Value,
+                ObservedAt = _lastGoodAt,
             });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -216,12 +239,12 @@ public sealed class SensorMonitor : IDisposable
         catch (LibreNmsApiException ex)
         {
             _logger.LogWarning(ex, "Sensor poll failed");
-            Polled?.Invoke(this, SensorPollResult.Failed(ex.ToUserMessage(), ex.IsPermissionDenied));
+            Polled?.Invoke(this, Failure(ex.ToUserMessage(), ex.IsPermissionDenied, ex.IsTimeout));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Sensor poll failed unexpectedly");
-            Polled?.Invoke(this, SensorPollResult.Failed(ex.Message));
+            Polled?.Invoke(this, Failure(ex.Message));
         }
         finally
         {
@@ -231,6 +254,21 @@ public sealed class SensorMonitor : IDisposable
 
     private static IEnumerable<int> GetDistinctDeviceIds(IReadOnlyList<Sensor> sensors)
         => sensors.Select(s => s.DeviceId).Distinct();
+
+    private SensorPollResult Failure(string message, bool refused = false, bool timedOut = false)
+    {
+        var keep = !refused && ReferenceEquals(_lastConnection, _client.Connection);
+        return new SensorPollResult
+        {
+            Succeeded = false,
+            Sensors = keep ? _lastGood : Array.Empty<Sensor>(),
+            CompletedAt = DateTimeOffset.Now,
+            ObservedAt = keep ? _lastGoodAt : null,
+            ErrorMessage = message,
+            IsPermissionDenied = refused,
+            IsTimeout = timedOut,
+        };
+    }
 
     public void Dispose()
     {
