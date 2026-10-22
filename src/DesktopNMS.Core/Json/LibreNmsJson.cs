@@ -320,9 +320,9 @@ public sealed class LooseNullableDoubleConverter : JsonConverter<double?>
         switch (reader.TokenType)
         {
             case JsonTokenType.Number:
-                return reader.GetDouble();
+                return reader.TryGetDouble(out var number) && double.IsFinite(number) ? number : null;
             case JsonTokenType.String:
-                return double.TryParse(reader.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+                return double.TryParse(reader.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && double.IsFinite(parsed) ? parsed : null;
             case JsonTokenType.Null:
                 return null;
             default:
@@ -333,7 +333,7 @@ public sealed class LooseNullableDoubleConverter : JsonConverter<double?>
 
     public override void Write(Utf8JsonWriter writer, double? value, JsonSerializerOptions options)
     {
-        if (value.HasValue)
+        if (value.HasValue && double.IsFinite(value.Value))
         {
             writer.WriteNumberValue(value.Value);
         }

@@ -51,15 +51,16 @@ public static class PoeBudget
         var connectedSensor = list.FirstOrDefault(s =>
             string.Equals(s.SensorClass, "count", StringComparison.OrdinalIgnoreCase)
             && s.Description?.Contains("PoE Devices Connected", StringComparison.OrdinalIgnoreCase) == true);
-        if (connectedSensor is not null)
+        if (connectedSensor?.Current is { } count && double.IsFinite(count) && count >= 0 && count <= int.MaxValue)
         {
-            connected = (int)Math.Round(connectedSensor.Current);
+            connected = (int)Math.Round(count);
         }
 
         var groups = new Dictionary<string, (string? Label, double? Used, double? Total, double? Remaining)>(StringComparer.Ordinal);
 
         foreach (var sensor in list.Where(IsPoePower))
         {
+            if (!sensor.HasReading) continue;
             var kind = KindOf(sensor.Description!);
             if (kind is null)
             {

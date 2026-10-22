@@ -28,22 +28,35 @@ public sealed class Sensor
     public string? Index { get; set; }
 
     [JsonPropertyName("sensor_current")]
-    public double Current { get; set; }
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseNullableDoubleConverter))]
+    public double? Current { get; set; }
+
+    /// <summary>A missing or non-finite reading is unavailable, never a healthy zero.</summary>
+    [JsonIgnore]
+    public bool HasReading => Current is { } value && double.IsFinite(value);
+
+    /// <summary>Optional unit supplied by the API for a class the client doesn't know.</summary>
+    [JsonPropertyName("sensor_unit")]
+    public string? Unit { get; set; }
 
     /// <summary>LibreNMS's own high-critical limit, if one is configured.</summary>
     [JsonPropertyName("sensor_limit")]
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseNullableDoubleConverter))]
     public double? LimitHigh { get; set; }
 
     /// <summary>LibreNMS's own high-warning limit, if one is configured.</summary>
     [JsonPropertyName("sensor_limit_warn")]
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseNullableDoubleConverter))]
     public double? LimitHighWarn { get; set; }
 
     /// <summary>LibreNMS's own low-critical limit, if one is configured.</summary>
     [JsonPropertyName("sensor_limit_low")]
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseNullableDoubleConverter))]
     public double? LimitLow { get; set; }
 
     /// <summary>LibreNMS's own low-warning limit, if one is configured.</summary>
     [JsonPropertyName("sensor_limit_low_warn")]
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseNullableDoubleConverter))]
     public double? LimitLowWarn { get; set; }
 
     [JsonPropertyName("lastupdate")]
