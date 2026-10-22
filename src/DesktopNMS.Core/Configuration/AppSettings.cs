@@ -482,6 +482,9 @@ public sealed class AppSettings
 public interface IThresholdEvaluator
 {
     AlertSeverity Evaluate(double value);
+
+    /// <summary>Absent readings have no severity; they are never compared with limits.</summary>
+    AlertSeverity Evaluate(double? value) => value is { } reading && double.IsFinite(reading) ? Evaluate(reading) : AlertSeverity.Unknown;
 }
 
 /// <summary>
@@ -533,6 +536,7 @@ public sealed class DbmThresholdSettings : IThresholdEvaluator
     /// <summary>Classifies a dBm reading using these bands.</summary>
     public AlertSeverity Evaluate(double value)
     {
+        if (!double.IsFinite(value)) return AlertSeverity.Unknown;
         if (value >= IgnoreAtOrAbove || value <= IgnoreAtOrBelow)
         {
             return AlertSeverity.Unknown;
@@ -598,6 +602,7 @@ public sealed class SignalThresholdSettings : IThresholdEvaluator
 
     public AlertSeverity Evaluate(double value)
     {
+        if (!double.IsFinite(value)) return AlertSeverity.Unknown;
         if (value >= IgnoreAtOrAbove || value <= IgnoreAtOrBelow)
         {
             return AlertSeverity.Unknown;
@@ -688,6 +693,7 @@ public sealed class BandThresholdSettings : IThresholdEvaluator
 
     public AlertSeverity Evaluate(double value)
     {
+        if (!double.IsFinite(value)) return AlertSeverity.Unknown;
         if (value <= LowCritical || value >= HighCritical)
         {
             return AlertSeverity.Critical;
@@ -757,6 +763,7 @@ public sealed class HybridThresholdEvaluator : IThresholdEvaluator
 
     public AlertSeverity Evaluate(double value)
     {
+        if (!double.IsFinite(value)) return AlertSeverity.Unknown;
         if (_ignoreAtOrAbove is { } above && value >= above)
         {
             return AlertSeverity.Unknown;

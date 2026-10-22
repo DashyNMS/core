@@ -32,7 +32,7 @@ public static class GraphLegend
             .Where(s => string.Equals(s.SensorClass, sensorClass, StringComparison.OrdinalIgnoreCase))
             .OrderBy(s => s.Description, StringComparer.OrdinalIgnoreCase)
             .ThenBy(s => s.SensorId)
-            .Select(s => new GraphLegendEntry(s.Description ?? $"Sensor {s.SensorId}", null, FormatSensor(s.Current, sensorClass), s.SensorId))
+            .Select(s => new GraphLegendEntry(s.Description ?? $"Sensor {s.SensorId}", null, FormatSensor(s.Current, sensorClass, s.Unit), s.SensorId))
             .ToList();
 
     /// <summary>A device's processors, in the order they're stored - as LibreNMS draws them.</summary>
@@ -83,6 +83,7 @@ public static class GraphLegend
     /// <summary>Packets or errors a second: "0.02/s", "840/s", "1.2k/s".</summary>
     public static string FormatPerSecond(double perSecond)
     {
+        if (!double.IsFinite(perSecond)) return "–";
         string[] units = ["", "k", "M", "G"];
         var value = perSecond;
         var unit = 0;
@@ -100,6 +101,7 @@ public static class GraphLegend
 
     public static string FormatRate(double bitsPerSecond)
     {
+        if (!double.IsFinite(bitsPerSecond)) return "–";
         string[] units = ["b/s", "kb/s", "Mb/s", "Gb/s", "Tb/s"];
         var value = bitsPerSecond;
         var unit = 0;
@@ -113,8 +115,16 @@ public static class GraphLegend
     }
 
     public static string FormatSensor(double value, string sensorClass)
+        => FormatSensor((double?)value, sensorClass);
+
+    public static string FormatRate(double? value) => value is { } number ? FormatRate(number) : "–";
+
+    public static string FormatPerSecond(double? value) => value is { } number ? FormatPerSecond(number) : "–";
+
+    public static string FormatSensor(double? reading, string? sensorClass, string? suppliedUnit = null)
     {
-        var unit = sensorClass.ToLowerInvariant() switch
+        if (reading is not { } value || !double.IsFinite(value)) return "–";
+        var unit = sensorClass?.ToLowerInvariant() switch
         {
             "temperature" => " °C",
             "humidity" or "charge" or "load" or "percent" or "loss" => "%",
@@ -133,7 +143,7 @@ public static class GraphLegend
             "waterflow" => " l/m",
             "tv_signal" => " dBmV",
             "bitrate" => " bps",
-            _ => string.Empty,
+            _ => string.IsNullOrWhiteSpace(suppliedUnit) ? string.Empty : " " + suppliedUnit.Trim(),
         };
 
         var number = Math.Abs(value) >= 100 ? value.ToString("0", CultureInfo.InvariantCulture) : value.ToString("0.#", CultureInfo.InvariantCulture);
