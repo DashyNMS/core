@@ -16,6 +16,30 @@ public static class UpdatePackage
     public const string DownloadPrefix = "https://github.com/DashyNMS/desktop/releases/download/";
 
     private static readonly Regex InstallerName = new(@"^DashyNMS-Setup-[0-9A-Za-z.\-]+\.exe$", RegexOptions.CultureInvariant);
+    private static readonly Regex NativePackageName = new(@"^DashyNMS-[0-9A-Za-z.\-]+-(osx-(x64|arm64)\.dmg|linux-(x64|arm64)\.AppImage)$", RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Selects an exact version and runtime. Windows retains its 1.x-compatible
+    /// installer name; a Linux package-manager install should not call this.
+    /// The app decides whether it can apply this kind of update.
+    /// </summary>
+    public static GitHubReleaseAsset? FindForRuntime(GitHubRelease release, string runtime)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        var version = release.TagName?.TrimStart('v');
+        if (string.IsNullOrWhiteSpace(version) || !Regex.IsMatch(version, @"^[0-9A-Za-z.\-]+$", RegexOptions.CultureInvariant)) return null;
+        var name = runtime switch
+        {
+            "win-x64" => $"DashyNMS-Setup-{version}.exe",
+            "osx-x64" or "osx-arm64" => $"DashyNMS-{version}-{runtime}.dmg",
+            "linux-x64" or "linux-arm64" => $"DashyNMS-{version}-{runtime}.AppImage",
+            _ => null,
+        };
+        if (name is null) return null;
+        var expectedUrl = DownloadPrefix + Uri.EscapeDataString(release.TagName!) + "/" + name;
+        return release.Assets.FirstOrDefault(a => a.Name == name && a.BrowserDownloadUrl == expectedUrl
+            && a.Size > 0 && ExpectedSha256(a) is not null);
+    }
 
     /// <summary>The release's installer - null if it has none this app would run.</summary>
     public static GitHubReleaseAsset? FindInstaller(GitHubRelease release)
@@ -58,7 +82,7 @@ public static class UpdatePackage
         ArgumentNullException.ThrowIfNull(asset);
 
         var expected = ExpectedSha256(asset) ?? throw new InvalidOperationException("The release publishes no SHA-256 for its installer.");
-        if (asset.Name is not { } name || !InstallerName.IsMatch(name) || asset.BrowserDownloadUrl is not { } url || !url.StartsWith(DownloadPrefix, StringComparison.Ordinal))
+        if (asset.Name is not { } name || !(InstallerName.IsMatch(name) || NativePackageName.IsMatch(name)) || asset.BrowserDownloadUrl is not { } url || !url.StartsWith(DownloadPrefix, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("That isn't a DashyNMS installer from its own releases.");
         }
