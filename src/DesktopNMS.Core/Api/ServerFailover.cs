@@ -117,6 +117,7 @@ public sealed class ServerFailover
     public static bool IsUnreachable(LibreNmsApiException ex)
     {
         ArgumentNullException.ThrowIfNull(ex);
+        if (ex.IsTimeout) return false;
 
         // A certificate waiting for the user to accept it (or changed since they
         // did) is a question for them, not a dead server - failing over would

@@ -15,6 +15,11 @@ namespace DesktopNMS.Core.Api;
 /// </summary>
 public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
 {
+    /// <summary>26.10 filters large sensor lists per account; allow two minutes without slowing other calls.</summary>
+    internal static TimeSpan RequestTimeout(string relativeUrl, int connectionSeconds)
+        => TimeSpan.FromSeconds(relativeUrl.Split('?')[0].Trim('/') == "resources/sensors"
+            ? Math.Max(120, connectionSeconds) : connectionSeconds);
+
     private readonly ILogger<LibreNmsTransport> _logger;
     private readonly ServerFailover _failover;
     private readonly object _sync = new();
@@ -216,7 +221,9 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         var http = new HttpClient(redirects, disposeHandler: false)
         {
             BaseAddress = onBackup && !dialBackupHost ? connection.BackupApiBase : connection.ApiBase,
-            Timeout = TimeSpan.FromSeconds(connection.TimeoutSeconds),
+            // Each request owns its timeout so slow sensor lists can have
+            // longer without changing concurrent interactive requests (#26).
+            Timeout = Timeout.InfiniteTimeSpan,
         };
 
         http.DefaultRequestHeaders.Add(SameServerRedirectHandler.TokenHeader, connection.ApiToken);
@@ -401,6 +408,9 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         }
 
         using var request = new HttpRequestMessage(method, relativeUrl);
+        var requestTimeout = RequestTimeout(relativeUrl, Connection?.TimeoutSeconds ?? 30);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(requestTimeout);
 
         if (body is not null)
         {
@@ -411,7 +421,7 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         HttpResponseMessage response;
         try
         {
-            response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
+            response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeout.Token)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -421,9 +431,10 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         catch (OperationCanceledException ex)
         {
             throw new LibreNmsApiException(
-                $"The request to LibreNMS timed out after {http.Timeout.TotalSeconds:0} seconds.",
+                $"The request to LibreNMS timed out after {requestTimeout.TotalSeconds:0} seconds.",
                 innerException: ex,
-                looksLikeStaleConnection: IsStaleConnectionFailure(ex));
+                looksLikeStaleConnection: !timeout.IsCancellationRequested && IsStaleConnectionFailure(ex))
+            { IsTimeout = timeout.IsCancellationRequested || !IsStaleConnectionFailure(ex) };
         }
         catch (HttpRequestException ex)
         {
@@ -498,11 +509,14 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Get, relativeUrl);
+        var requestTimeout = RequestTimeout(relativeUrl, Connection?.TimeoutSeconds ?? 30);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(requestTimeout);
 
         HttpResponseMessage response;
         try
         {
-            response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken)
+            response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeout.Token)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -512,9 +526,10 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         catch (OperationCanceledException ex)
         {
             throw new LibreNmsApiException(
-                $"The request to LibreNMS timed out after {http.Timeout.TotalSeconds:0} seconds.",
+                $"The request to LibreNMS timed out after {requestTimeout.TotalSeconds:0} seconds.",
                 innerException: ex,
-                looksLikeStaleConnection: IsStaleConnectionFailure(ex));
+                looksLikeStaleConnection: !timeout.IsCancellationRequested && IsStaleConnectionFailure(ex))
+            { IsTimeout = timeout.IsCancellationRequested || !IsStaleConnectionFailure(ex) };
         }
         catch (HttpRequestException ex)
         {

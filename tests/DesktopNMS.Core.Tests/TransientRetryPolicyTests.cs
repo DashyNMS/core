@@ -7,6 +7,24 @@ namespace DesktopNMS.Core.Tests;
 
 public class TransientRetryPolicyTests
 {
+    [Fact]
+    public void A_request_timeout_does_not_repeat_the_wait_or_trigger_failover()
+    {
+        var timeout = new LibreNmsApiException("Timed out") { IsTimeout = true };
+        Assert.False(TransientRetryPolicy.IsTransientFailure(timeout));
+        Assert.False(ServerFailover.IsUnreachable(timeout));
+        Assert.True(TransientRetryPolicy.IsTransientFailure(new LibreNmsApiException("Connection lost")));
+    }
+
+    [Theory]
+    [InlineData("resources/sensors", 30, 120)]
+    [InlineData("resources/sensors?columns=sensor_id", 30, 120)]
+    [InlineData("resources/sensors", 180, 180)]
+    [InlineData("devices", 30, 30)]
+    [InlineData("devices/1/health", 5, 5)]
+    public void Only_the_fleet_sensor_list_gets_a_longer_timeout(string route, int configured, int expected)
+        => Assert.Equal(TimeSpan.FromSeconds(expected), LibreNmsTransport.RequestTimeout(route, configured));
+
     [Theory]
     [InlineData("GET")]
     [InlineData("PUT")]

@@ -24,6 +24,9 @@ public sealed class LibreNmsApiException : Exception
 
     public HttpStatusCode? StatusCode { get; }
 
+    /// <summary>The request exhausted its allotted time; retrying would repeat the full wait.</summary>
+    public bool IsTimeout { get; init; }
+
     /// <summary>
     /// Set when the connection failed only because the server's certificate
     /// isn't one the user has trusted yet, or has changed since they did,

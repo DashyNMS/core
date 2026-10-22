@@ -42,8 +42,8 @@ public static class TransientRetryPolicy
     /// not found, validation, and the like).
     /// </summary>
     public static bool IsTransientFailure(LibreNmsApiException ex) =>
-        ex.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout
-        || ex.StatusCode is null;
+        !ex.IsTimeout && (ex.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout
+        || ex.StatusCode is null);
 
     /// <summary>
     /// Exponential backoff (attempt 1 -&gt; ~375-500ms, attempt 2 -&gt; ~750ms-1s,
