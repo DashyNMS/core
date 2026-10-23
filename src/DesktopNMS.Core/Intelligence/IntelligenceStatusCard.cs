@@ -5,7 +5,10 @@ namespace DesktopNMS.Core.Intelligence;
 /// <summary>A bounded batch of typed lookup observations. Kept as evidence, never displayed as a separate card.</summary>
 public sealed record IntelligenceStatusCard(string Title, string Scope, DateTimeOffset ObservedAt, IReadOnlyList<IntelligenceStatusRow> Rows);
 
-public sealed record IntelligenceStatusRow(string Name, string Detail, string Status, string Tone, string DeviceStatus = "", int? DeviceId = null, string? AlertRule = null, string? Hostname = null, int? AlertId = null, IReadOnlyList<IntelligenceFaultRef>? Faults = null);
+public sealed record IntelligenceStatusRow(string Name, string Detail, string Status, string Tone, string DeviceStatus = "", int? DeviceId = null, string? AlertRule = null, string? Hostname = null, int? AlertId = null, IReadOnlyList<IntelligenceFaultRef>? Faults = null)
+{
+    public IntelligenceObjectReference? Object { get; init; }
+}
 
 /// <summary>
 /// One fault of an alert group, as the MCP server lists it on LibreNMS 26.10
@@ -20,7 +23,7 @@ public static class IntelligenceStatusCards
 
     public static IReadOnlyList<IntelligenceStatusCard> FromTool(string tool, string output, DateTimeOffset observedAt)
     {
-        if (output.Length > 1_000_000 || tool is not ("active_alerts" or "alert_details" or "device_health" or "device_details" or "find_device" or "network_overview")) return [];
+        if (output.Length > 1_000_000 || tool is not ("active_alerts" or "alert_details" or "device_health" or "device_details" or "find_device" or "network_overview" or "device_sensors" or "health_overview" or "list_groups_and_locations")) return [];
         try
         {
             using var json = JsonDocument.Parse(output, new JsonDocumentOptions { MaxDepth = 32 });
@@ -28,7 +31,30 @@ public static class IntelligenceStatusCards
             if (Text(root, "status") != "ok" || Get(root, "data") is not { ValueKind: JsonValueKind.Object } data) return [];
             var rows = new List<IntelligenceStatusRow>();
             var cards = new List<IntelligenceStatusCard>();
-            if (tool == "alert_details")
+            if (tool is "device_sensors" or "health_overview")
+            {
+                foreach (var item in Items(Get(data, "readings")).Take(MaxRows))
+                {
+                    var reading = tool == "device_sensors" ? item : Get(item, "reading");
+                    var device = tool == "device_sensors" ? Get(data, "device") : Get(item, "device");
+                    if (Identifier(reading, "sensor_id") is not { } id || Id(device) is not { } deviceId) continue;
+                    var state = Text(reading, "state") ?? "unknown";
+                    rows.Add(new(Clean(Text(reading, "description") ?? $"Sensor {id}"), Name(device), state, state is "critical" or "warning" ? state : state == "ok" ? "up" : "unknown")
+                    { Object = new("sensor", id, deviceId) });
+                }
+                if (rows.Count > 0) cards.Add(new("Sensor readings", "Readings returned by the lookup", observedAt, rows));
+            }
+            else if (tool == "list_groups_and_locations")
+            {
+                foreach (var kind in new[] { "group", "location" })
+                foreach (var item in Items(Get(data, kind + "s")).Take(MaxRows - rows.Count))
+                {
+                    if (Identifier(item, kind + "_id") is not { } id || Text(item, "name") is not { Length: > 0 } name) continue;
+                    rows.Add(new(Clean(name), kind == "group" ? "Device group" : "Location", "", "unknown") { Object = new(kind, id) });
+                }
+                if (rows.Count > 0) cards.Add(new("Network scopes", "Groups and locations returned by the lookup", observedAt, rows));
+            }
+            else if (tool == "alert_details")
             {
                 var alert = Get(data, "alert");
                 var device = Get(data, "device");
@@ -41,7 +67,8 @@ public static class IntelligenceStatusCards
                 var entity = Text(alert, "entity") is { } named ? " · " + Clean(named) : "";
                 var ofGroup = Number(Get(data, "group"), "fault_count") is > 1 and var count ? $" · one of {count} faults" : "";
                 rows.Add(new(Name(device), ruleName + entity + " · " + AlertState(Text(alert, "state")) + ofGroup, severity.Label, severity.Tone,
-                    DeviceState(Text(device, "status")), Id(device), ruleName, Clean(Text(device, "hostname") ?? ""), alertId));
+                    DeviceState(Text(device, "status")), Id(device), ruleName, Clean(Text(device, "hostname") ?? ""), alertId)
+                { Object = new(Get(data, "group").ValueKind == JsonValueKind.Object ? "fault" : "alert", alertId, Id(device), Identifier(alert, "rule_id")) });
                 cards.Add(new("Alert details", "Individual alert lookup", observedAt, rows));
             }
             else if (tool == "active_alerts")
@@ -67,7 +94,8 @@ public static class IntelligenceStatusCards
                             .ToList();
                         rows.Add(new(Name(device), Clean(Text(alert, "rule") ?? "Alert") + what + " · " + state + age,
                             severity.Label, severity.Tone, DeviceState(Text(device, "device_status")), Id(device),
-                            Clean(Text(alert, "rule") ?? "Alert"), Clean(Text(device, "hostname") ?? ""), Identifier(alert, "alert_id"), faults.Count > 0 ? faults : null));
+                            Clean(Text(alert, "rule") ?? "Alert"), Clean(Text(device, "hostname") ?? ""), Identifier(alert, "alert_id"), faults.Count > 0 ? faults : null)
+                        { Object = Identifier(alert, "alert_id") is { } id ? new(faults.Count > 0 ? "fault" : "alert", id, Id(device), Identifier(alert, "rule_id")) : null });
                     }
                     if (rows.Count >= MaxRows) break;
                 }

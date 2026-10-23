@@ -40,7 +40,10 @@ public sealed class SavedIntelligenceMessage
     public List<IntelligenceImage> Images { get; set; } = new();
 }
 
-public sealed record SavedChatSpotlight(int Kind, int Id, string Name);
+public sealed record SavedChatSpotlight(int Kind, int Id, string Name)
+{
+    public IntelligenceObjectReference? Object { get; init; }
+}
 public enum IntelligenceReplyOutcome { Generating, Completed, Stopped, Interrupted, Failed }
 /// <param name="Unreadable">File names of saved chats that couldn't be read this time; damaged ones are renamed to <c>.chat.bad</c>.</param>
 public sealed record SavedChatCollection(Guid? ActiveId, IReadOnlyList<SavedIntelligenceChat> Chats, IReadOnlyList<string>? Unreadable = null);
