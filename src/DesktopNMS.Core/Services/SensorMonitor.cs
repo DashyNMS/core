@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Configuration;
 using DesktopNMS.Core.Models;
+using DesktopNMS.Core.Sensors;
 using Microsoft.Extensions.Logging;
 
 namespace DesktopNMS.Core.Services;
@@ -57,6 +58,7 @@ public sealed class SensorMonitor : IDisposable
     private readonly AlertMonitor _alertMonitor;
     private readonly ILogger<SensorMonitor> _logger;
     private readonly IAppActivity _activity;
+    private readonly SensorDefinitionStore? _definitions;
     private DateTimeOffset _lastPolled = DateTimeOffset.MinValue;
     private IReadOnlyList<Sensor> _lastGood = Array.Empty<Sensor>();
     private DateTimeOffset? _lastGoodAt;
@@ -77,6 +79,19 @@ public sealed class SensorMonitor : IDisposable
         AlertMonitor alertMonitor,
         IAppActivity activity,
         ILogger<SensorMonitor> logger)
+        : this(client, session, settings, devices, alertMonitor, activity, logger, null)
+    {
+    }
+
+    public SensorMonitor(
+        ILibreNmsClient client,
+        IConnectionState session,
+        ISettingsStore settings,
+        IDeviceCache devices,
+        AlertMonitor alertMonitor,
+        IAppActivity activity,
+        ILogger<SensorMonitor> logger,
+        SensorDefinitionStore? definitions)
     {
         _client = client;
         _session = session;
@@ -85,6 +100,8 @@ public sealed class SensorMonitor : IDisposable
         _alertMonitor = alertMonitor;
         _logger = logger;
         _activity = activity;
+        _definitions = definitions;
+        if (_definitions is not null) _definitions.Changed += OnDefinitionsChanged;
         _activity.Changed += OnActivityChanged;
     }
 
@@ -216,6 +233,9 @@ public sealed class SensorMonitor : IDisposable
                 .EnsureCurrentAsync(GetDistinctDeviceIds(sensors), cancellationToken)
                 .ConfigureAwait(false);
 
+            if (_definitions is not null)
+                await _definitions.ApplyAsync(sensors, id => _devices.Get(id)?.Os, cancellationToken).ConfigureAwait(false);
+
             _logger.LogDebug("Polled {Count} sensors", sensors.Count);
 
             // A sign-out or server switch while the request was in flight
@@ -255,6 +275,30 @@ public sealed class SensorMonitor : IDisposable
     private static IEnumerable<int> GetDistinctDeviceIds(IReadOnlyList<Sensor> sensors)
         => sensors.Select(s => s.DeviceId).Distinct();
 
+    private void OnDefinitionsChanged(object? sender, EventArgs e) => _ = RefreshDefinitionsAsync();
+
+    private async Task RefreshDefinitionsAsync()
+    {
+        if (_disposed || _definitions is null) return;
+        try
+        {
+            await _pollGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_disposed || !_session.IsConnected || !ReferenceEquals(_lastConnection, _client.Connection) || _lastGoodAt is null) return;
+                await _definitions.ApplyAsync(_lastGood, id => _devices.Get(id)?.Os).ConfigureAwait(false);
+                if (_disposed || !ReferenceEquals(_lastConnection, _client.Connection)) return;
+                Polled?.Invoke(this, new SensorPollResult { Succeeded = true, Sensors = _lastGood, CompletedAt = DateTimeOffset.Now, ObservedAt = _lastGoodAt });
+            }
+            finally { _pollGate.Release(); }
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or OperationCanceledException)
+        {
+            // Shutdown can race a queued presentation refresh.
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "Could not refresh sensor definition presentation"); }
+    }
+
     private SensorPollResult Failure(string message, bool refused = false, bool timedOut = false)
     {
         var keep = !refused && ReferenceEquals(_lastConnection, _client.Connection);
@@ -278,6 +322,7 @@ public sealed class SensorMonitor : IDisposable
         }
 
         _disposed = true;
+        if (_definitions is not null) _definitions.Changed -= OnDefinitionsChanged;
 
         try
         {
