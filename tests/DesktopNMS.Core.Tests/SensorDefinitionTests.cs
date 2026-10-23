@@ -65,6 +65,26 @@ public sealed class SensorDefinitionTests
         Assert.False(result.HasAuthoritativeSeverity);
     }
 
+    [Theory]
+    [InlineData("26.10.2")]
+    [InlineData("26.10.2+catalogue.1")]
+    [InlineData("26.10.2+catalogue.12")]
+    public void Stable_catalogue_corrections_preserve_the_exact_asset_version(string version)
+    {
+        Assert.True(SensorDefinitionIndex.IsVersion(version));
+        var catalogue = SensorDefinitionCatalogue.Load(Shard(), catalogueVersion: version);
+        Assert.Equal(version, catalogue.Resolve(Reading(), "example-os")!.CatalogueVersion);
+    }
+
+    [Theory]
+    [InlineData("26.10.2-rc1")]
+    [InlineData("26.10.2+catalogue.0")]
+    [InlineData("26.10.2+catalogue.01")]
+    [InlineData("26.10.2+anything")]
+    [InlineData("26.10.2/other")]
+    public void Unsafe_and_prerelease_catalogue_versions_still_reject(string version)
+        => Assert.False(SensorDefinitionIndex.IsVersion(version));
+
     [Fact]
     public void Unsupported_schema_duplicate_properties_and_wrong_os_reject()
     {

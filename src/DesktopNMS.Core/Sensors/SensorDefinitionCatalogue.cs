@@ -138,7 +138,7 @@ public sealed class SensorDefinitionIndex
     public required SensorDefinitionShard[] Shards { get; init; }
     public required SensorDefinitionAsset Notices { get; init; }
 
-    internal static bool IsVersion(string? value) => value is { Length: <= 80 } && Regex.IsMatch(value, @"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$", RegexOptions.CultureInvariant);
+    internal static bool IsVersion(string? value) => value is { Length: <= 80 } && Regex.IsMatch(value, @"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:\+catalogue\.[1-9][0-9]*)?$", RegexOptions.CultureInvariant);
     internal static bool IsOs(string? value) => value is { Length: <= 128 } && Regex.IsMatch(value, @"^[A-Za-z0-9][A-Za-z0-9._-]*$", RegexOptions.CultureInvariant) && value is not "." and not "..";
     internal static bool IsHash(string? value) => value is { Length: 64 } && Regex.IsMatch(value, "^[a-f0-9]{64}$", RegexOptions.CultureInvariant);
 
