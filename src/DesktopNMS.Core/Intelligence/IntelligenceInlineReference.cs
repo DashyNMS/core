@@ -1,7 +1,10 @@
 namespace DesktopNMS.Core.Intelligence;
 
 /// <summary>A verified object mention that can be annotated inside prose, without adding another panel.</summary>
-public sealed record IntelligenceInlineReference(string Key, string Name, string Status, string Tone, DateTimeOffset ObservedAt, string Detail);
+public sealed record IntelligenceInlineReference(string Key, string Name, string Status, string Tone, DateTimeOffset ObservedAt, string Detail)
+{
+    public IntelligenceObjectReference? Object { get; init; }
+}
 
 public static class IntelligenceInlineReferences
 {
@@ -9,23 +12,27 @@ public static class IntelligenceInlineReferences
     {
         foreach (var row in snapshot.Rows)
         {
+            if (row.Object is { IsValid: true, Kind: "sensor" or "group" or "location" } target)
+                yield return new(target.Kind + ":" + target.Id, row.Name, row.Status, row.Tone, snapshot.ObservedAt, row.Detail) { Object = target };
             if (row.DeviceId is { } id)
             {
                 var state = string.IsNullOrEmpty(row.DeviceStatus) ? row.Status : row.DeviceStatus;
                 // Alert severity is never a device's operational state.
                 if (state is not ("Up" or "Down" or "Disabled" or "Unknown")) state = "Unknown";
                 var tone = state == "Up" ? "up" : state == "Down" ? "down" : "unknown";
-                yield return new("device:" + id, row.Name, state, tone, snapshot.ObservedAt, "Device status at lookup time");
+                yield return new("device:" + id, row.Name, state, tone, snapshot.ObservedAt, "Device status at lookup time") { Object = new("device", id) };
             }
             if (row.AlertId is { } alertId && !string.IsNullOrWhiteSpace(row.AlertRule))
-                yield return new("alert:" + alertId, AlertLabel(row.AlertRule, row.Status), row.Status, row.Tone, snapshot.ObservedAt, row.Name + " · " + row.Detail);
+                yield return new("alert:" + alertId, AlertLabel(row.AlertRule, row.Status), row.Status, row.Tone, snapshot.ObservedAt, row.Name + " · " + row.Detail)
+                { Object = row.Object ?? new("alert", alertId, row.DeviceId) };
 
             // Each listed fault of a group (LibreNMS 26.10, desktop#354): "CPU 3" by its own fault ID.
             foreach (var fault in row.Faults ?? [])
             {
                 if (string.IsNullOrWhiteSpace(row.AlertRule) || fault.Id == row.AlertId) continue;
                 var label = AlertLabel(row.AlertRule, row.Status) + (fault.Entity is { } entity ? " · " + entity : "");
-                yield return new("alert:" + fault.Id, label, row.Status, row.Tone, snapshot.ObservedAt, row.Name + " · " + fault.State);
+                yield return new("alert:" + fault.Id, label, row.Status, row.Tone, snapshot.ObservedAt, row.Name + " · " + fault.State)
+                { Object = new("fault", fault.Id, row.DeviceId) };
             }
         }
     }

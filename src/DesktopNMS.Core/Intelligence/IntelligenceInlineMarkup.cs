@@ -5,10 +5,10 @@ namespace DesktopNMS.Core.Intelligence;
 /// <summary>Display-only markers: no arbitrary UI, navigation or tool invocation.</summary>
 public static partial class IntelligenceInlineMarkup
 {
-    [GeneratedRegex(@"\[\[(device|alert|status|severity|bullet):([a-z]+|[1-9][0-9]{0,9})\]\]|\[\[(?:recommendation|update)\]\]", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\[\[(device|alert|sensor|group|location|status|severity|bullet):([a-z]+|[1-9][0-9]{0,9})\]\]|\[\[(?:recommendation|update)\]\]", RegexOptions.CultureInvariant)]
     public static partial Regex Token();
 
-    [GeneratedRegex(@"```[\s\S]*?(?:```|\z)|`[^`]*`|\[\[(?:device|alert|status|severity|bullet):(?:[a-z]+|[1-9][0-9]{0,9})\]\]|\[\[(?:recommendation|update)\]\]", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"```[\s\S]*?(?:```|\z)|`[^`]*`|\[\[(?:device|alert|sensor|group|location|status|severity|bullet):(?:[a-z]+|[1-9][0-9]{0,9})\]\]|\[\[(?:recommendation|update)\]\]", RegexOptions.CultureInvariant)]
     private static partial Regex MarkdownToken();
 
     [GeneratedRegex(@"^\[\[bullet:(critical|warning|ok|unknown)\]\]\s*", RegexOptions.CultureInvariant)]
@@ -22,7 +22,7 @@ public static partial class IntelligenceInlineMarkup
         if (marker == "[[update]]") return new("update", "Notes", "", "unknown", default, "Evidence limitation");
         var kind = match.Groups[1].Value;
         var value = match.Groups[2].Value;
-        if (kind is "device" or "alert")
+        if (kind is "device" or "alert" or "sensor" or "group" or "location")
             return references.FirstOrDefault(reference => reference.Key == kind + ":" + value);
         (string Label, string Tone)? label = (kind, value) switch
         {
