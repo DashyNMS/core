@@ -7,6 +7,17 @@ namespace DesktopNMS.Core.Tests;
 public sealed class IntelligenceObjectReferenceTests
 {
     [Fact]
+    public void Interface_scope_requires_its_parent_and_round_trips_in_saved_chats()
+    {
+        Assert.False(new IntelligenceObjectReference("port", 42).IsValid);
+        Assert.False(new IntelligenceObjectReference("port", 0, 12).IsValid);
+        var identity = new IntelligenceObjectReference("port", 42, 12);
+        Assert.True(identity.IsValid);
+        var saved = new SavedChatSpotlight(6, 42, "Switch · Ethernet1") { Object = identity };
+        Assert.Equal(saved, JsonSerializer.Deserialize<SavedChatSpotlight>(JsonSerializer.Serialize(saved)));
+    }
+
+    [Fact]
     public void A_single_fault_without_a_fault_list_keeps_its_source_and_rule()
     {
         var card = Assert.Single(IntelligenceStatusCards.FromTool("alert_details", """
