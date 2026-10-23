@@ -7,6 +7,16 @@ namespace DesktopNMS.Core.Tests;
 public sealed class IntelligenceObjectReferenceTests
 {
     [Fact]
+    public void A_single_fault_without_a_fault_list_keeps_its_source_and_rule()
+    {
+        var card = Assert.Single(IntelligenceStatusCards.FromTool("alert_details", """
+            {"status":"ok","data":{"alert":{"alert_id":73,"source":"fault"},"group":null,
+            "device":{"device_id":12,"hostname":"switch.example.net"},"rule":{"rule_id":4,"name":"Temperature"}}}
+            """, DateTimeOffset.UtcNow));
+        var reference = IntelligenceInlineReferences.FromSnapshot(card).Single(r => r.Key == "alert:73");
+        Assert.Equal(new IntelligenceObjectReference("fault", 73, 12, 4), reference.Object);
+    }
+    [Fact]
     public void Sensor_references_keep_the_sensor_and_parent_device_from_tool_evidence()
     {
         var card = Assert.Single(IntelligenceStatusCards.FromTool("device_sensors", """

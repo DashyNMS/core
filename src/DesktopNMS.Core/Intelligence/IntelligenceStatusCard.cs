@@ -68,7 +68,7 @@ public static class IntelligenceStatusCards
                 var ofGroup = Number(Get(data, "group"), "fault_count") is > 1 and var count ? $" · one of {count} faults" : "";
                 rows.Add(new(Name(device), ruleName + entity + " · " + AlertState(Text(alert, "state")) + ofGroup, severity.Label, severity.Tone,
                     DeviceState(Text(device, "status")), Id(device), ruleName, Clean(Text(device, "hostname") ?? ""), alertId)
-                { Object = new(Get(data, "group").ValueKind == JsonValueKind.Object ? "fault" : "alert", alertId, Id(device), Identifier(alert, "rule_id")) });
+                { Object = new(AlertKind(alert, Get(data, "group").ValueKind == JsonValueKind.Object), alertId, Id(device), Identifier(rule, "rule_id")) });
                 cards.Add(new("Alert details", "Individual alert lookup", observedAt, rows));
             }
             else if (tool == "active_alerts")
@@ -95,7 +95,7 @@ public static class IntelligenceStatusCards
                         rows.Add(new(Name(device), Clean(Text(alert, "rule") ?? "Alert") + what + " · " + state + age,
                             severity.Label, severity.Tone, DeviceState(Text(device, "device_status")), Id(device),
                             Clean(Text(alert, "rule") ?? "Alert"), Clean(Text(device, "hostname") ?? ""), Identifier(alert, "alert_id"), faults.Count > 0 ? faults : null)
-                        { Object = Identifier(alert, "alert_id") is { } id ? new(faults.Count > 0 ? "fault" : "alert", id, Id(device), Identifier(alert, "rule_id")) : null });
+                        { Object = Identifier(alert, "alert_id") is { } id ? new(AlertKind(alert, faults.Count > 0), id, Id(device), Identifier(alert, "rule_id")) : null });
                     }
                     if (rows.Count >= MaxRows) break;
                 }
@@ -146,6 +146,9 @@ public static class IntelligenceStatusCards
     {
         if (Number(source, key) is { } count) rows.Add(new(label, count.ToString("N0"), status, tone));
     }
+
+    private static string AlertKind(JsonElement alert, bool hasFaults) => Text(alert, "source") switch
+    { "fault" => "fault", "alert" => "alert", _ => hasFaults ? "fault" : "alert" };
 
     private static JsonElement Get(JsonElement value, string key) => value.ValueKind == JsonValueKind.Object && value.TryGetProperty(key, out var child) ? child : default;
     private static string? Text(JsonElement value, string key) => Get(value, key) is { ValueKind: JsonValueKind.String } text ? text.GetString() : null;
