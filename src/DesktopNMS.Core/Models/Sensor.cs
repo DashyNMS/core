@@ -19,6 +19,16 @@ public sealed class Sensor
     [JsonPropertyName("sensor_class")]
     public string? SensorClass { get; set; }
 
+    [JsonPropertyName("sensor_type")]
+    public string? SensorType { get; set; }
+
+    [JsonPropertyName("sensor_oid")]
+    public string? Oid { get; set; }
+
+    /// <summary>Presentation resolved by the optional installation catalogue; never sent to LibreNMS.</summary>
+    [JsonIgnore]
+    public Sensors.SensorStateResolution? StateDefinition { get; set; }
+
     [JsonPropertyName("sensor_descr")]
     public string? Description { get; set; }
 
