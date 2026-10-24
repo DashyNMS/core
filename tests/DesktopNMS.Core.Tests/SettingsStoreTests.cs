@@ -64,6 +64,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(5, store.Current.RecentlyViewedDeviceCount);
         Assert.Equal(DeviceNameStyle.SysName, store.Current.DeviceNameStyle);
         Assert.Equal(StartupTab.Dashboard, store.Current.StartupTab);
+        Assert.True(store.Current.DownloadUpdatesAutomatically);
         Assert.False(store.Current.IntelligenceSingleChatMode);
     }
 
@@ -87,7 +88,36 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(store.Current.ServerTimestampsAreUtc);
         Assert.Equal(10, store.Current.RecentlyViewedDeviceCount);
         Assert.Equal(DeviceNameStyle.Hostname, store.Current.DeviceNameStyle);
+        Assert.True(store.Current.DownloadUpdatesAutomatically);
         Assert.False(store.Current.IntelligenceSingleChatMode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Automatic_update_downloads_survive_save_and_reload(bool enabled)
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.DownloadUpdatesAutomatically = enabled;
+
+        store.Save();
+
+        var reloaded = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        Assert.Equal(enabled, reloaded.Current.DownloadUpdatesAutomatically);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Editing_a_clone_keeps_automatic_downloads_until_changed(bool enabled)
+    {
+        var settings = new AppSettings { DownloadUpdatesAutomatically = enabled };
+
+        var edited = settings.Clone();
+
+        Assert.Equal(enabled, edited.DownloadUpdatesAutomatically);
+        edited.DownloadUpdatesAutomatically = !enabled;
+        Assert.Equal(enabled, settings.DownloadUpdatesAutomatically);
     }
 
     [Theory]
