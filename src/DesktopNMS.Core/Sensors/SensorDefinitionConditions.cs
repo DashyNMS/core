@@ -6,6 +6,13 @@ namespace DesktopNMS.Core.Sensors;
 /// <summary>Bounded data predicates; unavailable context cannot satisfy a negated condition.</summary>
 internal static class SensorDefinitionConditions
 {
+    internal static bool OidMatches(SensorDefinitionMatch match, string oid)
+    {
+        if (oid != match.OidPrefix && !oid.StartsWith(match.OidPrefix + ".", StringComparison.Ordinal)) return false;
+        return match.OidSuffix is null || oid.Length > match.OidPrefix.Length + match.OidSuffix.Length + 2
+            && oid.EndsWith("." + match.OidSuffix, StringComparison.Ordinal);
+    }
+
     internal static void Validate(JsonElement node)
     {
         var count = 0;

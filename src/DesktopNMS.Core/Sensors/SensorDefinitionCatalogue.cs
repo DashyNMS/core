@@ -27,6 +27,7 @@ public sealed record SensorDefinitionMatch(string Os, string SensorClass, string
 {
     public string TypeMatch { get; init; } = "exact";
     public JsonElement[]? Conditions { get; init; }
+    public string? OidSuffix { get; init; }
 }
 public sealed record SensorDefinitionState(string Value, string Label, string? GenericState);
 public sealed record SensorDefinitionReference(string SourceId, string Path, string Symbol, bool SuppliesSeverity);
@@ -98,10 +99,11 @@ public sealed class SensorDefinitionCatalogue
                 || item.States is not { Length: > 0 and <= 4096 } || item.SourceRefs is not { Length: > 0 and <= 100 })
                 throw new InvalidDataException("Invalid or ambiguous sensor definition.");
             if (match.TypeMatch is not ("exact" or "template" or "any")
-                || (catalogue.SchemaVersion == 1 && (match.TypeMatch != "exact" || match.Conditions is not null))
+                || (catalogue.SchemaVersion == 1 && (match.TypeMatch != "exact" || match.Conditions is not null || match.OidSuffix is not null))
                 || (match.TypeMatch == "any" && match.SensorType != "*")
                 || (match.TypeMatch == "template" && (!match.SensorType.Contains('*') || match.SensorType.Count(c => c == '*') > 8))
-                || match.Conditions is { Length: > 16 })
+                || match.Conditions is { Length: > 16 }
+                || (match.OidSuffix is not null && !IsOidSuffix(match.OidSuffix)))
                 throw new InvalidDataException("Unsupported sensor selector.");
             foreach (var condition in match.Conditions ?? []) SensorDefinitionConditions.Validate(condition);
             var values = new HashSet<string>(StringComparer.Ordinal);
@@ -132,6 +134,7 @@ public sealed class SensorDefinitionCatalogue
 
     internal static bool Text(string? value, int length) => !string.IsNullOrWhiteSpace(value) && value.Length <= length;
     internal static bool IsOid(string? value) => value is { Length: <= 1024 } && Regex.IsMatch(value, @"^[0-2](?:\.(?:0|[1-9][0-9]*))+$", RegexOptions.CultureInvariant);
+    private static bool IsOidSuffix(string? value) => value is { Length: > 0 and <= 1024 } && Regex.IsMatch(value, @"^(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*$", RegexOptions.CultureInvariant);
     private static bool IsInteger(string? value) => value is { Length: <= 32 } && Regex.IsMatch(value, @"^(?:0|-?[1-9][0-9]*)$", RegexOptions.CultureInvariant);
 
     public SensorStateResolution? Resolve(Sensor sensor, string? os) => Resolve(sensor, os, null);
@@ -160,15 +163,17 @@ public sealed class SensorDefinitionCatalogue
         _patterns.TryGetValue(os, out var patterns);
         var typed = (exact ?? []).Concat(patterns ?? []).Where(item => SensorDefinitionConditions.TypeMatches(item.Match, sensor.SensorType!)).ToArray();
         if (typed.Length == 0) return SensorStateResolution.Missing(SensorDefinitionOutcome.TypeMissing);
-        var identity = typed.Where(item => oid == item.Match.OidPrefix || oid.StartsWith(item.Match.OidPrefix + ".", StringComparison.Ordinal)).ToArray();
+        var identity = typed.Where(item => SensorDefinitionConditions.OidMatches(item.Match, oid)).ToArray();
         if (identity.Length == 0) return SensorStateResolution.Missing(SensorDefinitionOutcome.OidMismatch);
         var candidates = identity.Where(item => (item.Match.Conditions ?? []).All(condition => SensorDefinitionConditions.Evaluate(condition, os, device) == true))
             .OrderByDescending(item => item.Match.OidPrefix.Length)
+            .ThenByDescending(item => item.Match.OidSuffix?.Length ?? 0)
             .ThenByDescending(item => item.Match.TypeMatch == "exact" ? 2 : item.Match.TypeMatch == "template" ? 1 : 0).ToArray();
         if (candidates.Length == 0) return SensorStateResolution.Missing(identity.Any(item => (item.Match.Conditions ?? []).Any(condition => SensorDefinitionConditions.Evaluate(condition, os, device) is null))
             ? SensorDefinitionOutcome.ContextUnavailable : SensorDefinitionOutcome.ContextMismatch);
         var definition = candidates[0];
         if (candidates.Skip(1).Any(item => item.Match.OidPrefix.Length == definition.Match.OidPrefix.Length
+            && (item.Match.OidSuffix?.Length ?? 0) == (definition.Match.OidSuffix?.Length ?? 0)
             && item.Match.TypeMatch == definition.Match.TypeMatch && !item.States.OrderBy(state => state.Value, StringComparer.Ordinal).SequenceEqual(definition.States.OrderBy(state => state.Value, StringComparer.Ordinal))))
             return SensorStateResolution.Missing(SensorDefinitionOutcome.Ambiguous);
         var state = definition.States.SingleOrDefault(state => state.Value == value.ToString("0", CultureInfo.InvariantCulture));

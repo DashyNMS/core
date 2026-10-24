@@ -93,4 +93,20 @@ public sealed class SensorDefinitionRulesTests
         Assert.False(unknown.HasAuthoritativeSeverity);
         Assert.Equal(SensorDefinitionOutcome.MissingOperatingSystem, catalogue.ResolveDetailed(Reading(), null).Outcome);
     }
+
+    [Fact]
+    public void Fixed_oid_suffixes_do_not_match_neighbouring_columns_or_an_empty_index()
+    {
+        var definition = Definition("suffix", "exampleFan", "exact");
+        definition["match"]!["oidSuffix"] = "6.1";
+        var catalogue = Catalogue(definition);
+        var sensor = Reading(); sensor.Oid = "1.3.6.1.4.1.32473.1.7.6.1";
+        Assert.NotNull(catalogue.Resolve(sensor, "example-os"));
+        sensor.Oid = "1.3.6.1.4.1.32473.1.7.6.10";
+        Assert.Null(catalogue.Resolve(sensor, "example-os"));
+        sensor.Oid = "1.3.6.1.4.1.32473.1.6.1";
+        Assert.Null(catalogue.Resolve(sensor, "example-os"));
+        sensor.Oid = "1.3.6.1.4.1.32473.10.7.6.1";
+        Assert.Null(catalogue.Resolve(sensor, "example-os"));
+    }
 }

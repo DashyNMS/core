@@ -46,7 +46,7 @@ GitHub Packages needs a login even for public packages: a token with `read:packa
 
 The assembly and namespaces are still `DesktopNMS.Core`; renaming them is [#1](https://github.com/DashyNMS/core/issues/1).
 
-Sensor definition readers accept schemas 1 and 2. They prefer the separate v2 feed, falling back to v1 only when v2 returns 404. Existing `Resolve` and `ApplyAsync` calls remain supported. Consumers with device metadata should use `Resolve(sensor, os, device)` or `ApplyWithDevicesAsync` so hardware/version conditions can be evaluated. `ResolveDetailed` and `SensorStateResolution.Outcome` distinguish unavailable data, coverage gaps, unknown enum values and conflicts. `SensorMonitor` supplies cached device metadata automatically; Desktop and MCP need the updated Core package, with no vendor-specific matching code.
+Sensor definition readers accept schemas 1 and 2. They prefer the separate v2 feed, falling back to v1 only when v2 returns 404. Existing `Resolve` and `ApplyAsync` calls remain supported. Schema 2 preserves fixed OID suffixes after an index, so neighbouring columns cannot match a rule accidentally. Consumers with device metadata should use `Resolve(sensor, os, device)` or `ApplyWithDevicesAsync` so hardware/version conditions can be evaluated. `ResolveDetailed` and `SensorStateResolution.Outcome` distinguish unavailable data, coverage gaps, unknown enum values and conflicts. `SensorMonitor` supplies cached device metadata automatically; Desktop and MCP need the updated Core package, with no vendor-specific matching code.
 
 ## Build it
 
