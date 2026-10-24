@@ -176,7 +176,7 @@ public sealed class SensorDefinitionStore : IDisposable
             }
             if (_readOnly && previous is null) return false;
             var refresh = !_readOnly && (force || previous is null || DateTimeOffset.UtcNow - _lastCheck >= TimeSpan.FromHours(24));
-            var indexBytes = refresh ? await DownloadAsync(options.Feed, 1024 * 1024, token).ConfigureAwait(false) : null;
+            var indexBytes = refresh ? await DownloadIndexAsync(options, token).ConfigureAwait(false) : null;
             var index = indexBytes is null ? previous! : SensorDefinitionIndex.Load(indexBytes);
             var staged = new List<(string Os, SensorDefinitionCatalogue Catalogue, string Hash, int Bytes)>();
             foreach (var os in wanted)
@@ -194,7 +194,7 @@ public sealed class SensorDefinitionStore : IDisposable
                 var compressed = File.Exists(path) ? await ReadFileBoundedAsync(path, 524288, token).ConfigureAwait(false) : null;
                 if (_readOnly && compressed is null) continue;
                 if (!_readOnly && (compressed is null || !Matches(compressed, shard.Sha256, shard.DownloadBytes)))
-                    compressed = await DownloadAsync(options.Asset(index.CatalogueVersion, "os/" + os + ".json.gz"), shard.DownloadBytes, token).ConfigureAwait(false);
+                    compressed = await DownloadAsync(options.Asset(index.CatalogueVersion, (index.SchemaVersion == 2 ? "v2/" : "") + "os/" + os + ".json.gz"), shard.DownloadBytes, token).ConfigureAwait(false);
                 if (compressed is null || !Matches(compressed, shard.Sha256, shard.DownloadBytes)) throw new InvalidDataException("OS definitions checksum or size does not match.");
                 var raw = await ExpandAsync(compressed, shard.ExpandedBytes, token).ConfigureAwait(false);
                 var catalogue = SensorDefinitionCatalogue.Load(raw, os, index.CatalogueVersion);
@@ -210,7 +210,7 @@ public sealed class SensorDefinitionStore : IDisposable
                 EnsureSafe(noticesPath);
                 var notices = File.Exists(noticesPath) ? await ReadFileBoundedAsync(noticesPath, 1048576, token).ConfigureAwait(false) : null;
                 if (notices is null || !Matches(notices, index.Notices.Sha256, index.Notices.DownloadBytes))
-                    notices = await DownloadAsync(options.Asset(index.CatalogueVersion, "notices.txt"), index.Notices.DownloadBytes, token).ConfigureAwait(false);
+                    notices = await DownloadAsync(options.Asset(index.CatalogueVersion, (index.SchemaVersion == 2 ? "v2/" : "") + "notices.txt"), index.Notices.DownloadBytes, token).ConfigureAwait(false);
                 if (!Matches(notices, index.Notices.Sha256, index.Notices.DownloadBytes)) throw new InvalidDataException("Definition notices checksum does not match.");
                 CheckCurrent(options, generation, token);
                 await WriteAtomicAsync(noticesPath, notices, token).ConfigureAwait(false);
@@ -244,17 +244,47 @@ public sealed class SensorDefinitionStore : IDisposable
         }
     }
 
-    public SensorStateResolution? Resolve(Sensor sensor, string? os)
+    private async Task<byte[]> DownloadIndexAsync(SensorDefinitionOptions options, CancellationToken token)
     {
-        lock (_sync)
+        try { return await DownloadAsync(options.ContextualFeed, 1024 * 1024, token).ConfigureAwait(false); }
+        catch (HttpRequestException error) when (error.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
-            if (!_options.Enabled || os is null || !_memory.TryGetValue(os, out var entry)) return null;
-            _memory[os] = entry with { Access = ++_access };
-            return entry.Catalogue.Resolve(sensor, os);
+            // Existing/custom schema-1 repositories continue to work. A malformed
+            // or unavailable v2 feed must never silently downgrade a catalogue.
+            return await DownloadAsync(options.Feed, 1024 * 1024, token).ConfigureAwait(false);
         }
     }
 
-    public async Task ApplyAsync(IReadOnlyList<Sensor> sensors, Func<int, string?> operatingSystem, CancellationToken cancellationToken = default)
+    public SensorStateResolution? Resolve(Sensor sensor, string? os) => Resolve(sensor, os, null);
+
+    public SensorStateResolution? Resolve(Sensor sensor, string? os, Device? device)
+    {
+        var result = ResolveDetailed(sensor, os, device);
+        return result.Outcome == SensorDefinitionOutcome.Resolved ? result : null;
+    }
+
+    public SensorStateResolution ResolveDetailed(Sensor sensor, string? os, Device? device = null)
+    {
+        lock (_sync)
+        {
+            if (!_options.Enabled) return SensorStateResolution.Missing(SensorDefinitionOutcome.Disabled);
+            if (os is null) return SensorStateResolution.Missing(SensorDefinitionOutcome.MissingOperatingSystem);
+            if (_index is null) return SensorStateResolution.Missing(SensorDefinitionOutcome.CatalogueUnavailable);
+            if (!_index.Shards.Any(shard => shard.Os == os)) return SensorStateResolution.Missing(SensorDefinitionOutcome.UnsupportedOperatingSystem);
+            if (!_memory.TryGetValue(os, out var entry)) return SensorStateResolution.Missing(SensorDefinitionOutcome.ShardUnavailable);
+            _memory[os] = entry with { Access = ++_access };
+            return entry.Catalogue.ResolveDetailed(sensor, os, device);
+        }
+    }
+
+    public Task ApplyAsync(IReadOnlyList<Sensor> sensors, Func<int, string?> operatingSystem, CancellationToken cancellationToken = default)
+        => ApplyCoreAsync(sensors, operatingSystem, _ => null, cancellationToken);
+
+    /// <summary>Keep vendor rules in the pack while supplying the metadata required by their conditions.</summary>
+    public Task ApplyWithDevicesAsync(IReadOnlyList<Sensor> sensors, Func<int, Device?> device, CancellationToken cancellationToken = default)
+        => ApplyCoreAsync(sensors, id => device(id)?.Os, device, cancellationToken);
+
+    private async Task ApplyCoreAsync(IReadOnlyList<Sensor> sensors, Func<int, string?> operatingSystem, Func<int, Device?> device, CancellationToken cancellationToken)
     {
         if (_readOnly) await InitialiseAsync(cancellationToken).ConfigureAwait(false);
         foreach (var sensor in sensors.Where(sensor => !sensor.HasClass("state"))) sensor.StateDefinition = null;
@@ -262,7 +292,7 @@ public sealed class SensorDefinitionStore : IDisposable
         {
             if (Options.Enabled && group.Key is not null) await SynchroniseAsync(new[] { group.Key }, cancellationToken: cancellationToken).ConfigureAwait(false);
             foreach (var sensor in group)
-                sensor.StateDefinition = Options.Enabled ? Resolve(sensor, group.Key) ?? SensorStateResolution.Unresolved : null;
+                sensor.StateDefinition = Options.Enabled ? ResolveDetailed(sensor, group.Key, device(sensor.DeviceId)) : null;
         }
     }
 

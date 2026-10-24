@@ -234,7 +234,7 @@ public sealed class SensorMonitor : IDisposable
                 .ConfigureAwait(false);
 
             if (_definitions is not null)
-                await _definitions.ApplyAsync(sensors, id => _devices.Get(id)?.Os, cancellationToken).ConfigureAwait(false);
+                await _definitions.ApplyWithDevicesAsync(sensors, id => _devices.Get(id), cancellationToken).ConfigureAwait(false);
 
             _logger.LogDebug("Polled {Count} sensors", sensors.Count);
 
@@ -286,7 +286,7 @@ public sealed class SensorMonitor : IDisposable
             try
             {
                 if (_disposed || !_session.IsConnected || !ReferenceEquals(_lastConnection, _client.Connection) || _lastGoodAt is null) return;
-                await _definitions.ApplyAsync(_lastGood, id => _devices.Get(id)?.Os).ConfigureAwait(false);
+                await _definitions.ApplyWithDevicesAsync(_lastGood, id => _devices.Get(id)).ConfigureAwait(false);
                 if (_disposed || !ReferenceEquals(_lastConnection, _client.Connection)) return;
                 Polled?.Invoke(this, new SensorPollResult { Succeeded = true, Sensors = _lastGood, CompletedAt = DateTimeOffset.Now, ObservedAt = _lastGoodAt });
             }

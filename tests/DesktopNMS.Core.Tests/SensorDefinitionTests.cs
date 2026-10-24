@@ -28,9 +28,9 @@ public sealed class SensorDefinitionTests
     }
 
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-    private static byte[] Shard(string os = "example-os", string? generic = "ok", string label = "Ready") => JsonSerializer.SerializeToUtf8Bytes(new
+    private static byte[] Shard(string os = "example-os", string? generic = "ok", string label = "Ready", int schema = 1) => JsonSerializer.SerializeToUtf8Bytes(new
     {
-        schemaVersion = 1,
+        schemaVersion = schema,
         sources = new[] { new { id = "fixture", kind = "reviewed-override", location = "https://example.net/definitions", revision = "fixture-1", licence = "MIT" } },
         definitions = new[] { new { id = os + "/fan", match = new { os, sensorClass = "state", sensorType = "exampleFanState", oidPrefix = "1.3.6.1.4.1.32473.1" },
             states = new[] { new { value = "2", label, genericState = generic } },
@@ -89,7 +89,7 @@ public sealed class SensorDefinitionTests
     public void Unsupported_schema_duplicate_properties_and_wrong_os_reject()
     {
         Assert.Throws<InvalidDataException>(() => SensorDefinitionCatalogue.Load(Shard(), "other-os"));
-        Assert.Throws<InvalidDataException>(() => SensorDefinitionCatalogue.Load(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(Shard()).Replace("\"schemaVersion\":1", "\"schemaVersion\":2"))));
+        Assert.Throws<InvalidDataException>(() => SensorDefinitionCatalogue.Load(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(Shard()).Replace("\"schemaVersion\":1", "\"schemaVersion\":3"))));
         Assert.Throws<InvalidDataException>(() => SensorDefinitionCatalogue.Load(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(Shard()).Replace("\"schemaVersion\":1", "\"schemaVersion\":1,\"schemaVersion\":1"))));
     }
 
@@ -158,6 +158,31 @@ public sealed class SensorDefinitionTests
         Assert.True(await store.SynchroniseAsync(force: true));
         Assert.Equal(downloads, network.Requests.Count(path => path.EndsWith(".gz")));
         Assert.Equal("1.0.1", store.Resolve(Reading(), "example-os")!.CatalogueVersion);
+    }
+
+    [Fact]
+    public async Task New_readers_prefer_v2_assets_and_fall_back_only_when_the_feed_is_absent()
+    {
+        using var fixture = new Installation();
+        using var network = new Server { Schema = 2 };
+        using var store = fixture.Store(network);
+        await store.ConfigureAsync(new() { Enabled = true });
+        Assert.True(await store.SynchroniseAsync(new[] { "example-os" }), store.Status);
+        Assert.Contains(network.Requests, path => path.Contains("/feeds/v2/", StringComparison.Ordinal));
+        Assert.Contains(network.Requests, path => path.Contains("/data/v2/os/", StringComparison.Ordinal));
+        Assert.DoesNotContain(network.Requests, path => path.Contains("/feeds/v1/", StringComparison.Ordinal));
+        Assert.Equal("Ready", store.Resolve(Reading(), "example-os")!.Label);
+    }
+
+    [Fact]
+    public async Task Unavailable_v2_feed_cannot_silently_downgrade_to_v1()
+    {
+        using var fixture = new Installation();
+        using var network = new Server { V2Status = HttpStatusCode.ServiceUnavailable };
+        using var store = fixture.Store(network);
+        await store.ConfigureAsync(new() { Enabled = true });
+        Assert.False(await store.SynchroniseAsync(new[] { "example-os" }));
+        Assert.DoesNotContain(network.Requests, path => path.Contains("/feeds/v1/", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -284,6 +309,8 @@ public sealed class SensorDefinitionTests
         public string Label = "Ready";
         public bool Offline, Corrupt, BlockShard;
         public int SystemCount;
+        public int Schema = 1;
+        public HttpStatusCode? V2Status;
         public readonly List<string> Requests = new();
         public readonly TaskCompletionSource ShardRequested = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource ReleaseShard = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -294,17 +321,19 @@ public sealed class SensorDefinitionTests
             var path = request.RequestUri!.AbsolutePath;
             Requests.Add(path);
             if (Offline) throw new HttpRequestException("Offline");
+            if (path.Contains("/feeds/v2/", StringComparison.Ordinal) && (V2Status is not null || Schema == 1))
+                return new(V2Status ?? HttpStatusCode.NotFound) { RequestMessage = request };
             var systems = SystemCount == 0 ? new[] { "example-os" } : Enumerable.Range(0, SystemCount).Select(id => "example-os-" + id).ToArray();
-            var shards = systems.Select(os => { var raw = Shard(os, label: Label); var zip = Compress(raw); return new SensorDefinitionShard(os, Hash(zip), zip.Length, raw.Length, 1); }).ToArray();
+            var shards = systems.Select(os => { var raw = Shard(os, label: Label, schema: Schema); var zip = Compress(raw); return new SensorDefinitionShard(os, Hash(zip), zip.Length, raw.Length, 1); }).ToArray();
             var notice = Encoding.UTF8.GetBytes("Synthetic fixture notices");
             byte[] bytes;
-            if (path.EndsWith("stable.json")) bytes = JsonSerializer.SerializeToUtf8Bytes(new SensorDefinitionIndex { SchemaVersion = 1, CatalogueVersion = Version, Shards = shards, Notices = new(Hash(notice), notice.Length) }, Json);
+            if (path.EndsWith("stable.json")) bytes = JsonSerializer.SerializeToUtf8Bytes(new SensorDefinitionIndex { SchemaVersion = Schema, CatalogueVersion = Version, Shards = shards, Notices = new(Hash(notice), notice.Length) }, Json);
             else if (path.EndsWith("notices.txt")) bytes = notice;
             else
             {
                 if (BlockShard) { ShardRequested.TrySetResult(); await ReleaseShard.Task.ConfigureAwait(false); }
                 var os = Path.GetFileName(path)[..^".json.gz".Length];
-                bytes = Compress(Shard(os, label: Label));
+                bytes = Compress(Shard(os, label: Label, schema: Schema));
                 if (Corrupt) bytes[0] ^= 1;
             }
             return new(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes), RequestMessage = request };

@@ -32,6 +32,7 @@ public sealed record SensorDefinitionOptions
 
     internal string SourceKey => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(Repository)));
     internal Uri Feed => new("https://raw.githubusercontent.com/" + Repository["https://github.com/".Length..] + "/main/feeds/v1/stable.json");
+    internal Uri ContextualFeed => new("https://raw.githubusercontent.com/" + Repository["https://github.com/".Length..] + "/main/feeds/v2/stable.json");
     internal Uri Asset(string version, string path)
         => new("https://raw.githubusercontent.com/" + Repository["https://github.com/".Length..] + "/v" + version + "/data/" + path);
 }
