@@ -24,6 +24,8 @@ public sealed class SensorDefinitionStore : IDisposable
     private long _generation;
     private long _access;
     private DateTimeOffset _lastCheck;
+    private DateTimeOffset _nextRetry;
+    private string? _lastUpdateError;
     private bool _disposed;
     private sealed record Entry(SensorDefinitionCatalogue Catalogue, string Hash, int Bytes, long Access);
 
@@ -60,7 +62,7 @@ public sealed class SensorDefinitionStore : IDisposable
             lock (_sync)
             {
                 if (_options.Repository != options.Repository || _options.Enabled != options.Enabled)
-                { _memory.Clear(); _index = null; _lastCheck = default; }
+                { _memory.Clear(); _index = null; _lastCheck = default; _nextRetry = default; _lastUpdateError = null; }
                 _options = options;
             }
             if (!options.Enabled)
@@ -100,6 +102,8 @@ public sealed class SensorDefinitionStore : IDisposable
             _memory.Clear();
             _index = null;
             _lastCheck = default;
+            _nextRetry = default;
+            _lastUpdateError = null;
         }
         Changed?.Invoke(this, EventArgs.Empty);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -175,9 +179,36 @@ public sealed class SensorDefinitionStore : IDisposable
                 wanted = (systems ?? _memory.Keys.ToArray()).Where(SensorDefinitionIndex.IsOs).Distinct(StringComparer.Ordinal).ToArray();
             }
             if (_readOnly && previous is null) return false;
-            var refresh = !_readOnly && (force || previous is null || DateTimeOffset.UtcNow - _lastCheck >= TimeSpan.FromHours(24));
-            var indexBytes = refresh ? await DownloadIndexAsync(options, token).ConfigureAwait(false) : null;
-            var index = indexBytes is null ? previous! : SensorDefinitionIndex.Load(indexBytes);
+            var cacheOnly = !_readOnly && _lastUpdateError is not null && DateTimeOffset.UtcNow < _nextRetry;
+            var refresh = !_readOnly && (force || !cacheOnly && (previous is null || DateTimeOffset.UtcNow - _lastCheck >= TimeSpan.FromHours(24)));
+            byte[]? indexBytes = null;
+            var index = previous;
+            if (refresh)
+            {
+                try
+                {
+                    indexBytes = await DownloadIndexAsync(options, token).ConfigureAwait(false);
+                    index = SensorDefinitionIndex.Load(indexBytes);
+                    cacheOnly = false;
+                }
+                catch (Exception ex) when (Expected(ex) && !token.IsCancellationRequested)
+                {
+                    lock (_sync)
+                    {
+                        CheckCurrent(options, generation, token);
+                        _lastUpdateError = ex.Message;
+                        _nextRetry = DateTimeOffset.UtcNow.AddMinutes(15);
+                    }
+                    if (previous is null) throw;
+                    // A stale index still identifies valid, hash-checked disk
+                    // shards. Refresh failure must not prevent their first load.
+                    index = previous;
+                    indexBytes = null;
+                    cacheOnly = true;
+                    refresh = false;
+                }
+            }
+            if (index is null) return false;
             var staged = new List<(string Os, SensorDefinitionCatalogue Catalogue, string Hash, int Bytes)>();
             foreach (var os in wanted)
             {
@@ -192,6 +223,7 @@ public sealed class SensorDefinitionStore : IDisposable
                 var path = ObjectPath(options, shard.Sha256);
                 EnsureSafe(path);
                 var compressed = File.Exists(path) ? await ReadFileBoundedAsync(path, 524288, token).ConfigureAwait(false) : null;
+                if (cacheOnly && (compressed is null || !Matches(compressed, shard.Sha256, shard.DownloadBytes))) continue;
                 if (_readOnly && compressed is null) continue;
                 if (!_readOnly && (compressed is null || !Matches(compressed, shard.Sha256, shard.DownloadBytes)))
                     compressed = await DownloadAsync(options.Asset(index.CatalogueVersion, (index.SchemaVersion == 2 ? "v2/" : "") + "os/" + os + ".json.gz"), shard.DownloadBytes, token).ConfigureAwait(false);
@@ -215,8 +247,15 @@ public sealed class SensorDefinitionStore : IDisposable
                 CheckCurrent(options, generation, token);
                 await WriteAtomicAsync(noticesPath, notices, token).ConfigureAwait(false);
                 await WriteAtomicAsync(Path.Combine(SourceDirectory(options), "index.json"), indexBytes!, token).ConfigureAwait(false);
-                _lastCheck = DateTimeOffset.UtcNow;
-                await WriteAtomicAsync(Path.Combine(SourceDirectory(options), "checked.txt"), System.Text.Encoding.UTF8.GetBytes(_lastCheck.ToString("O", CultureInfo.InvariantCulture)), token).ConfigureAwait(false);
+                var checkedAt = DateTimeOffset.UtcNow;
+                await WriteAtomicAsync(Path.Combine(SourceDirectory(options), "checked.txt"), System.Text.Encoding.UTF8.GetBytes(checkedAt.ToString("O", CultureInfo.InvariantCulture)), token).ConfigureAwait(false);
+                lock (_sync)
+                {
+                    CheckCurrent(options, generation, token);
+                    _lastCheck = checkedAt;
+                    _nextRetry = default;
+                    _lastUpdateError = null;
+                }
             }
             CheckCurrent(options, generation, token);
             lock (_sync)
@@ -227,12 +266,16 @@ public sealed class SensorDefinitionStore : IDisposable
                 while (_memory.Count > 16 || _memory.Values.Sum(entry => (long)entry.Bytes) > 4 * 1024 * 1024)
                     _memory.Remove(_memory.MinBy(pair => pair.Value.Access).Key);
             }
-            Status = "Sensor definitions " + index.CatalogueVersion + " ready; " + LoadedSystemCount + " system catalogues in memory.";
+            Status = cacheOnly ? "Using cached sensor definitions " + index.CatalogueVersion + "; update unavailable, retrying later. " + _lastUpdateError
+                : "Sensor definitions " + index.CatalogueVersion + " ready; " + LoadedSystemCount + " system catalogues in memory.";
             return true;
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { return false; }
         catch (Exception ex) when (Expected(ex))
         {
+            if (acquired)
+                lock (_sync)
+                    if (generation == _generation) { _nextRetry = DateTimeOffset.UtcNow.AddMinutes(15); _lastUpdateError = ex.Message; }
             Status = "Couldn't update sensor definitions; the selected source's cached definitions have been kept. " + ex.Message;
             return false;
         }

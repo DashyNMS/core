@@ -161,6 +161,53 @@ public sealed class SensorDefinitionTests
     }
 
     [Fact]
+    public async Task Stale_cached_shards_load_after_offline_restart_without_one_timeout_per_system()
+    {
+        using var fixture = new Installation();
+        using var network = new Server { SystemCount = 21 };
+        using (var writer = fixture.Store(network))
+        {
+            await writer.ConfigureAsync(new() { Enabled = true });
+            Assert.True(await writer.SynchroniseAsync(Enumerable.Range(0, 20).Select(id => "example-os-" + id)));
+        }
+        var checkedFile = Assert.Single(Directory.GetFiles(fixture.Paths.DefinitionsDirectory, "checked.txt", SearchOption.AllDirectories));
+        var stale = DateTimeOffset.UtcNow.AddDays(-2);
+        await File.WriteAllTextAsync(checkedFile, stale.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        network.Requests.Clear();
+        network.Offline = true;
+        using var restarted = fixture.Store(network);
+        await restarted.InitialiseAsync();
+        var sensors = Enumerable.Range(0, 21).Select(id => Reading(device: id)).ToArray();
+        await restarted.ApplyAsync(sensors, id => "example-os-" + id);
+        Assert.All(sensors.Take(20), sensor => Assert.Equal("Ready", sensor.StateDefinition!.Label));
+        Assert.Equal(SensorDefinitionOutcome.ShardUnavailable, sensors[20].StateDefinition!.Outcome);
+        Assert.Single(network.Requests);
+        Assert.Equal(stale, restarted.LastSuccessfulCheck);
+        Assert.Equal(stale, DateTimeOffset.Parse(await File.ReadAllTextAsync(checkedFile), System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Contains("cached", restarted.Status);
+        Assert.InRange(restarted.LoadedSystemCount, 1, 16);
+        await restarted.SynchroniseAsync(new[] { "example-os-0" }, force: true);
+        Assert.Equal(2, network.Requests.Count);
+        network.Offline = false;
+        Assert.True(await restarted.SynchroniseAsync(new[] { "example-os-20" }, force: true));
+        Assert.Equal("Ready", restarted.Resolve(Reading(device: 20), "example-os-20")!.Label);
+        Assert.True(restarted.LastSuccessfulCheck > stale);
+    }
+
+    [Fact]
+    public async Task Empty_offline_installations_back_off_once_for_the_whole_fleet()
+    {
+        using var fixture = new Installation();
+        using var network = new Server { Offline = true };
+        using var store = fixture.Store(network);
+        await store.ConfigureAsync(new() { Enabled = true });
+        var sensors = Enumerable.Range(0, 20).Select(id => Reading(device: id)).ToArray();
+        await store.ApplyAsync(sensors, id => "example-os-" + id);
+        Assert.Single(network.Requests);
+        Assert.All(sensors, sensor => Assert.Equal(SensorDefinitionOutcome.CatalogueUnavailable, sensor.StateDefinition!.Outcome));
+    }
+
+    [Fact]
     public async Task New_readers_prefer_v2_assets_and_fall_back_only_when_the_feed_is_absent()
     {
         using var fixture = new Installation();
