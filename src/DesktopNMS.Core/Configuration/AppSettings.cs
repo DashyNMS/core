@@ -222,6 +222,9 @@ public sealed class AppSettings
     /// <summary>Opt-in cosmetic companion on the Intelligence tab.</summary>
     public bool IntelligenceMascotEnabled { get; set; }
 
+    /// <summary>Use one in-memory chat instead of saving conversation history.</summary>
+    public bool IntelligenceSingleChatMode { get; set; }
+
     /// <summary>Allow current public information to be looked up using hosted web search.</summary>
     public bool IntelligenceWebSearchEnabled { get; set; } = true;
 
@@ -381,6 +384,7 @@ public sealed class AppSettings
         EnablePinnedDevices = EnablePinnedDevices,
         IntelligenceEnabled = IntelligenceEnabled,
         IntelligenceMascotEnabled = IntelligenceMascotEnabled,
+        IntelligenceSingleChatMode = IntelligenceSingleChatMode,
         IntelligenceWebSearchEnabled = IntelligenceWebSearchEnabled,
         IntelligenceReplyStyle = IntelligenceReplyStyle,
         IntelligenceColourStatusIndicators = IntelligenceColourStatusIndicators,

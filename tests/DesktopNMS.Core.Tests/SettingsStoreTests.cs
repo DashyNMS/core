@@ -64,6 +64,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(5, store.Current.RecentlyViewedDeviceCount);
         Assert.Equal(DeviceNameStyle.SysName, store.Current.DeviceNameStyle);
         Assert.Equal(StartupTab.Dashboard, store.Current.StartupTab);
+        Assert.False(store.Current.IntelligenceSingleChatMode);
     }
 
     [Fact]
@@ -86,5 +87,34 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.False(store.Current.ServerTimestampsAreUtc);
         Assert.Equal(10, store.Current.RecentlyViewedDeviceCount);
         Assert.Equal(DeviceNameStyle.Hostname, store.Current.DeviceNameStyle);
+        Assert.False(store.Current.IntelligenceSingleChatMode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Single_chat_mode_survives_save_and_reload(bool enabled)
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.IntelligenceSingleChatMode = enabled;
+
+        store.Save();
+
+        var reloaded = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        Assert.Equal(enabled, reloaded.Current.IntelligenceSingleChatMode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Editing_a_clone_keeps_single_chat_mode_until_changed(bool enabled)
+    {
+        var settings = new AppSettings { IntelligenceSingleChatMode = enabled };
+
+        var edited = settings.Clone();
+
+        Assert.Equal(enabled, edited.IntelligenceSingleChatMode);
+        edited.IntelligenceSingleChatMode = !enabled;
+        Assert.Equal(enabled, settings.IntelligenceSingleChatMode);
     }
 }
