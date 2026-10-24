@@ -25,6 +25,7 @@ DashyNMS Core is the plain .NET library behind [DashyNMS desktop](https://github
 - **Alerting:** change detection between polls, counting, history, notification rules, and the rule builder's field catalogue.
 - **Monitors and caches:** the alert, device and sensor pollers, the device and rule caches, and the dashboard layout. Each app supplies when it's in the background and whether it's signed in.
 - **Graphs:** LibreNMS's graphs restyled to the app's theme, with the app's own legends.
+- **Sensor definitions:** optional OS-sharded data with exact and source-derived type/context selectors. Unknown values, missing metadata and conflicting mappings remain unresolved.
 - **Sign-in, settings and the rest:** sign in with LibreNMS's own page, settings and the starter dashboard, and the open-source notices every app shows.
 
 ## Use it
@@ -44,6 +45,8 @@ GitHub Packages needs a login even for public packages: a token with `read:packa
 - **Development builds**, `2.0.0-ci.N`, come from every merge to `main`, so an app can test unreleased Core.
 
 The assembly and namespaces are still `DesktopNMS.Core`; renaming them is [#1](https://github.com/DashyNMS/core/issues/1).
+
+Sensor definition readers accept schemas 1 and 2. They prefer the separate v2 feed, falling back to v1 only when v2 returns 404. Existing `Resolve` and `ApplyAsync` calls remain supported. Consumers with device metadata should use `Resolve(sensor, os, device)` or `ApplyWithDevicesAsync` so hardware/version conditions can be evaluated. `ResolveDetailed` and `SensorStateResolution.Outcome` distinguish unavailable data, coverage gaps, unknown enum values and conflicts. `SensorMonitor` supplies cached device metadata automatically; Desktop and MCP need the updated Core package, with no vendor-specific matching code.
 
 ## Build it
 
