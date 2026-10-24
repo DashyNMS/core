@@ -115,6 +115,9 @@ public sealed class AppSettings
     /// <summary>Which tab is showing when the main window first appears.</summary>
     public StartupTab StartupTab { get; set; } = StartupTab.Dashboard;
 
+    /// <summary>Download available updates in the background instead of only notifying.</summary>
+    public bool DownloadUpdatesAutomatically { get; set; } = true;
+
     /// <summary>
     /// The newest release tag DashyNMS has already shown an update toast for,
     /// so the same "update available" notice does not repeat on every launch.
@@ -359,6 +362,7 @@ public sealed class AppSettings
         StartMinimised = StartMinimised,
         StartWithWindows = StartWithWindows,
         StartupTab = StartupTab,
+        DownloadUpdatesAutomatically = DownloadUpdatesAutomatically,
         LastNotifiedUpdateVersion = LastNotifiedUpdateVersion,
         LastRunVersion = LastRunVersion,
         WhatsNewShownVersion = WhatsNewShownVersion,
