@@ -66,6 +66,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(StartupTab.Dashboard, store.Current.StartupTab);
         Assert.True(store.Current.DownloadUpdatesAutomatically);
         Assert.False(store.Current.IntelligenceSingleChatMode);
+        Assert.Equal(DiagnosticsSharingPreference.Undecided, store.Current.DiagnosticsSharing);
     }
 
     [Fact]
@@ -90,6 +91,53 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(DeviceNameStyle.Hostname, store.Current.DeviceNameStyle);
         Assert.True(store.Current.DownloadUpdatesAutomatically);
         Assert.False(store.Current.IntelligenceSingleChatMode);
+        Assert.Equal(DiagnosticsSharingPreference.Undecided, store.Current.DiagnosticsSharing);
+    }
+
+    [Fact]
+    public void A_settings_file_without_a_diagnostics_choice_keeps_the_prompt_pending()
+    {
+        File.WriteAllText(SettingsFile, "{}");
+
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+
+        Assert.Equal(DiagnosticsSharingPreference.Undecided, store.Current.DiagnosticsSharing);
+    }
+
+    [Theory]
+    [InlineData(DiagnosticsSharingPreference.Undecided)]
+    [InlineData(DiagnosticsSharingPreference.None)]
+    [InlineData(DiagnosticsSharingPreference.ErrorsOnly)]
+    [InlineData(DiagnosticsSharingPreference.UsageOnly)]
+    [InlineData(DiagnosticsSharingPreference.ErrorsAndUsage)]
+    public void Diagnostics_sharing_choice_survives_save_and_reload(DiagnosticsSharingPreference choice)
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.DiagnosticsSharing = choice;
+
+        store.Save();
+
+        var reloaded = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        Assert.Equal(choice, reloaded.Current.DiagnosticsSharing);
+    }
+
+    [Theory]
+    [InlineData(DiagnosticsSharingPreference.Undecided)]
+    [InlineData(DiagnosticsSharingPreference.None)]
+    [InlineData(DiagnosticsSharingPreference.ErrorsOnly)]
+    [InlineData(DiagnosticsSharingPreference.UsageOnly)]
+    [InlineData(DiagnosticsSharingPreference.ErrorsAndUsage)]
+    public void Editing_a_clone_keeps_diagnostics_sharing_choice_until_changed(DiagnosticsSharingPreference choice)
+    {
+        var settings = new AppSettings { DiagnosticsSharing = choice };
+
+        var edited = settings.Clone();
+
+        Assert.Equal(choice, edited.DiagnosticsSharing);
+        edited.DiagnosticsSharing = choice == DiagnosticsSharingPreference.None
+            ? DiagnosticsSharingPreference.ErrorsAndUsage
+            : DiagnosticsSharingPreference.None;
+        Assert.Equal(choice, settings.DiagnosticsSharing);
     }
 
     [Theory]
