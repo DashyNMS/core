@@ -6,6 +6,15 @@ using DesktopNMS.Core.Models;
 
 namespace DesktopNMS.Core.Configuration;
 
+public enum DiagnosticsSharingPreference
+{
+    Undecided = 0,
+    None = 1,
+    ErrorsOnly = 2,
+    UsageOnly = 3,
+    ErrorsAndUsage = 4,
+}
+
 /// <summary>
 /// Which tab to show when DashyNMS starts. Mirrors DesktopNMS.ViewModels.MainTab,
 /// duplicated here rather than referenced so this Core project does not depend
@@ -144,6 +153,9 @@ public sealed class AppSettings
     /// ever be nudged towards a stable release.
     /// </summary>
     public bool IncludePreviewBuilds { get; set; }
+
+    /// <summary>Desktop's diagnostics choice. Undecided leaves sharing off and the consent prompt pending.</summary>
+    public DiagnosticsSharingPreference DiagnosticsSharing { get; set; }
 
     /// <summary>
     /// Skip the confirmation prompt before a large bulk alert acknowledge/
@@ -369,6 +381,7 @@ public sealed class AppSettings
         NavExpanded = NavExpanded,
         DeviceNavExpanded = DeviceNavExpanded,
         IncludePreviewBuilds = IncludePreviewBuilds,
+        DiagnosticsSharing = DiagnosticsSharing,
         SuppressBulkAlertActionConfirmation = SuppressBulkAlertActionConfirmation,
         ShowAlertTabBadge = ShowAlertTabBadge,
         AlertTabBadgeIncludesAcknowledged = AlertTabBadgeIncludesAcknowledged,
