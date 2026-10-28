@@ -140,6 +140,34 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(choice, settings.DiagnosticsSharing);
     }
 
+    [Fact]
+    public void Legacy_diagnostics_consent_remains_launch_only_after_reload()
+    {
+        File.WriteAllText(SettingsFile, "{\"diagnosticsSharing\":\"UsageOnly\"}");
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        Assert.Equal(DiagnosticsSharingPreference.UsageOnly, store.Current.DiagnosticsSharing);
+        Assert.Equal(0, store.Current.DiagnosticsConsentVersion);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(99)]
+    public void Diagnostics_consent_version_survives_clone_and_reload(int version)
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.DiagnosticsSharing = DiagnosticsSharingPreference.ErrorsAndUsage;
+        store.Current.DiagnosticsConsentVersion = version;
+        var edited = store.Current.Clone();
+        Assert.Equal(version, edited.DiagnosticsConsentVersion);
+        edited.DiagnosticsConsentVersion = version + 1;
+        Assert.Equal(version, store.Current.DiagnosticsConsentVersion);
+        store.Save();
+        var reloaded = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        Assert.Equal(version, reloaded.Current.DiagnosticsConsentVersion);
+        Assert.Equal(DiagnosticsSharingPreference.ErrorsAndUsage, reloaded.Current.DiagnosticsSharing);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
