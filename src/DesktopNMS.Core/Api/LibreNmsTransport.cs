@@ -41,6 +41,20 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         _failover.Changed += OnFailoverChanged;
     }
 
+    private Action<ApiRequestMeasurement>? _requestObserver;
+
+    /// <summary>
+    /// Optional host callback after each logical request including all retries/failover.
+    /// Null by default: no timing is captured. Hosts own consent and delivery and must
+    /// keep callbacks fast; callback failures are ignored. No URL or request content
+    /// is exposed. Replacing this callback affects requests starting afterwards.
+    /// </summary>
+    public Action<ApiRequestMeasurement>? RequestObserver
+    {
+        get => Volatile.Read(ref _requestObserver);
+        set => Volatile.Write(ref _requestObserver, value);
+    }
+
     public ServerFailover Failover => _failover;
 
     /// <summary>
@@ -274,6 +288,10 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         string relativeUrl,
         object? body = null,
         CancellationToken cancellationToken = default)
+        => ApiRequestObservation.Observe(relativeUrl, RequestObserver,
+            () => SendCoreAsync(method, relativeUrl, body, cancellationToken), cancellationToken, method);
+
+    private Task<JsonDocument> SendCoreAsync(HttpMethod method, string relativeUrl, object? body, CancellationToken cancellationToken)
         => LearnPermissionsAsync(method, relativeUrl, TrackReachabilityAsync(() => SendWithRetriesAsync(method, relativeUrl, body, cancellationToken)));
 
     /// <summary>A write refused with a 403 is remembered (#51), so the app can turn its buttons off instead of letting it fail again.</summary>
@@ -316,7 +334,8 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
     }
 
     public Task<string> SendRawAsync(string relativeUrl, CancellationToken cancellationToken = default)
-        => TrackReachabilityAsync(() => SendRawWithRetriesAsync(relativeUrl, cancellationToken));
+        => ApiRequestObservation.Observe(relativeUrl, RequestObserver,
+            () => TrackReachabilityAsync(() => SendRawWithRetriesAsync(relativeUrl, cancellationToken)), cancellationToken);
 
     /// <summary>
     /// Counts each request, once its own retries are spent, towards the
@@ -549,12 +568,16 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         }
     }
 
-    public async Task<IReadOnlyList<T>> GetCollectionAsync<T>(
+    public Task<IReadOnlyList<T>> GetCollectionAsync<T>(
         string relativeUrl,
         string collectionProperty,
         CancellationToken cancellationToken = default)
+        => ApiRequestObservation.Observe(relativeUrl, RequestObserver,
+            () => GetCollectionCoreAsync<T>(relativeUrl, collectionProperty, cancellationToken), cancellationToken);
+
+    private async Task<IReadOnlyList<T>> GetCollectionCoreAsync<T>(string relativeUrl, string collectionProperty, CancellationToken cancellationToken)
     {
-        using var document = await SendAsync(HttpMethod.Get, relativeUrl, body: null, cancellationToken)
+        using var document = await SendCoreAsync(HttpMethod.Get, relativeUrl, body: null, cancellationToken)
             .ConfigureAwait(false);
 
         if (!document.RootElement.TryGetProperty(collectionProperty, out var collection)
