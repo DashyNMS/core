@@ -158,6 +158,14 @@ public sealed class AppSettings
     public DiagnosticsSharingPreference DiagnosticsSharing { get; set; }
 
     /// <summary>
+    /// Version of Desktop's diagnostics disclosure explicitly accepted with the choice.
+    /// Zero identifies legacy launch-only consent. Consumers must not infer consent to
+    /// broader collection from the preference alone, or accept unknown future versions.
+    /// This metadata does not itself enable any collection.
+    /// </summary>
+    public int DiagnosticsConsentVersion { get; set; }
+
+    /// <summary>
     /// Skip the confirmation prompt before a large bulk alert acknowledge/
     /// unacknowledge (see MainViewModel's bulk-confirm threshold). Set when
     /// the user ticks "don't ask me again" on that prompt; re-enabled from
@@ -382,6 +390,7 @@ public sealed class AppSettings
         DeviceNavExpanded = DeviceNavExpanded,
         IncludePreviewBuilds = IncludePreviewBuilds,
         DiagnosticsSharing = DiagnosticsSharing,
+        DiagnosticsConsentVersion = DiagnosticsConsentVersion,
         SuppressBulkAlertActionConfirmation = SuppressBulkAlertActionConfirmation,
         ShowAlertTabBadge = ShowAlertTabBadge,
         AlertTabBadgeIncludesAcknowledged = AlertTabBadgeIncludesAcknowledged,
