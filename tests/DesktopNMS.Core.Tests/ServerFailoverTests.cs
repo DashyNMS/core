@@ -101,6 +101,8 @@ public class ServerFailoverTests
         using var server = new LoopbackLibreNms();
         var failover = new ServerFailover();
         using var transport = new LibreNmsTransport(NullLogger<LibreNmsTransport>.Instance, failover);
+        var observations = new List<ApiRequestMeasurement>();
+        transport.RequestObserver = observations.Add;
         transport.Configure(new LibreNmsConnection(
             new Uri($"http://librenms.invalid:{server.Port}/"), "token", timeoutSeconds: 5,
             backupWebRoot: new Uri($"http://127.0.0.1:{server.Port}/")));
@@ -108,11 +110,14 @@ public class ServerFailoverTests
         // First request: the main address fails (retries and all) - counted once.
         await Assert.ThrowsAsync<LibreNmsApiException>(() => transport.SendAsync(HttpMethod.Get, "system"));
         Assert.False(failover.IsOnBackup);
+        Assert.Single(observations);
 
         // Second: fails again, switches, and is answered through the backup.
         using var document = await transport.SendAsync(HttpMethod.Get, "system");
 
         Assert.True(failover.IsOnBackup);
+        Assert.Equal(2, observations.Count);
+        Assert.Equal(ApiRequestOutcome.Success, observations[1].Outcome);
 
         // The request still names the server, not the backup IP.
         Assert.Contains($"Host: librenms.invalid:{server.Port}", server.SingleRequest());
@@ -135,6 +140,20 @@ public class ServerFailoverTests
         var request = server.SingleRequest();
         Assert.StartsWith("GET /librenms/api/v0/system", request);
         Assert.Contains($"Host: 127.0.0.1:{server.Port}", request);
+    }
+
+    [Fact]
+    public async Task Collection_deserialisation_produces_one_observation_and_callback_failure_is_ignored()
+    {
+        using var server = new LoopbackLibreNms();
+        using var transport = new LibreNmsTransport(NullLogger<LibreNmsTransport>.Instance);
+        transport.Configure(new LibreNmsConnection(new Uri($"http://127.0.0.1:{server.Port}/"), "token", timeoutSeconds: 5));
+        var observations = new List<ApiRequestMeasurement>();
+        transport.RequestObserver = point => { observations.Add(point); throw new InvalidOperationException(); };
+        var items = await transport.GetCollectionAsync<int>("system", "system");
+        Assert.Empty(items);
+        Assert.Equal(ApiRequestOutcome.Success, Assert.Single(observations).Outcome);
+        Assert.NotEmpty(server.SingleRequest());
     }
 
     /// <summary>A tiny HTTP server on loopback playing LibreNMS - every request gets an empty "ok".</summary>
