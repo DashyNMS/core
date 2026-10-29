@@ -71,6 +71,50 @@ public class DeviceResourceTests
         Assert.Equal("cam-gate.example.net", camera.BestName);
     }
 
+    [Fact]
+    public void Omitted_device_readings_remain_unknown_and_round_trip_without_defaults()
+    {
+        var device = JsonSerializer.Deserialize<Device>("""{"device_id":7,"hostname":"example.net"}""", Json.LibreNmsJson.Options)!;
+        Assert.Null(device.ReportedStatus);
+        Assert.Null(device.ReportedDisabled);
+        Assert.Null(device.ReportedIgnore);
+        Assert.Null(device.ReportedUptime);
+        Assert.Null(device.ReportedIgnoreStatus);
+        Assert.Null(device.ReportedOverrideSysLocation);
+        Assert.Null(device.ReportedPollerGroup);
+        Assert.Equal(DeviceState.Unknown, device.ReportedState);
+        var copy = JsonSerializer.Deserialize<Device>(JsonSerializer.Serialize(device, Json.LibreNmsJson.Options), Json.LibreNmsJson.Options)!;
+        Assert.Null(copy.ReportedStatus);
+        Assert.Null(copy.ReportedUptime);
+    }
+
+    [Fact]
+    public void Explicit_false_and_zero_are_known_and_legacy_setters_keep_them_known()
+    {
+        var device = JsonSerializer.Deserialize<Device>("""{"device_id":7,"status":0,"disabled":"0","ignore":false,"uptime":0}""", Json.LibreNmsJson.Options)!;
+        Assert.Equal(false, device.ReportedStatus);
+        Assert.Equal(0L, device.ReportedUptime);
+        Assert.Equal(DeviceState.Down, device.ReportedState);
+        device.Status = true;
+        device.Uptime = 60;
+        Assert.Equal(true, device.ReportedStatus);
+        Assert.Equal(60L, device.ReportedUptime);
+        Assert.Equal(DeviceState.Up, device.ReportedState);
+    }
+
+    [Fact]
+    public void Null_flags_are_unknown_and_known_disabling_flags_take_precedence()
+    {
+        var device = JsonSerializer.Deserialize<Device>("""{"device_id":7,"status":null,"disabled":null,"ignore":null,"uptime":null}""", Json.LibreNmsJson.Options)!;
+        Assert.Equal(DeviceState.Unknown, device.ReportedState);
+        Assert.Null(device.ReportedUptime);
+        device.Disabled = true;
+        Assert.Equal(DeviceState.Disabled, device.ReportedState);
+        device.Disabled = false;
+        device.Ignore = true;
+        Assert.Equal(DeviceState.Ignored, device.ReportedState);
+    }
+
     private static async Task<HashSet<string>> FixtureKeys(string file)
     {
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "LibreNMS", file)));

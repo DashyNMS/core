@@ -11,6 +11,9 @@ namespace DesktopNMS.Core.Models;
 /// </summary>
 public enum DeviceState
 {
+    /// <summary>The response did not report enough flags to establish a state.</summary>
+    Unknown = -1,
+
     Up,
     Down,
 

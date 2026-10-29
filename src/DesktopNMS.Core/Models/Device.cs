@@ -81,11 +81,19 @@ public sealed class Device
 
     /// <summary>Forces <see cref="Location"/> to win over whatever the device's own sysLocation reports, instead of LibreNMS preferring sysLocation.</summary>
     [JsonPropertyName("override_sysLocation")]
-    public bool OverrideSysLocation { get; set; }
+    public bool? ReportedOverrideSysLocation { get; set; }
+
+    /// <summary>Compatibility accessor; use ReportedOverrideSysLocation when an omitted value must remain unknown.</summary>
+    [JsonIgnore]
+    public bool OverrideSysLocation { get => ReportedOverrideSysLocation ?? false; set => ReportedOverrideSysLocation = value; }
 
     /// <summary>Which poller in a distributed-poller setup owns this device - see <see cref="Api.AddDeviceRequest.PollerGroup"/>.</summary>
     [JsonPropertyName("poller_group")]
-    public int PollerGroup { get; set; }
+    public int? ReportedPollerGroup { get; set; }
+
+    /// <summary>Compatibility accessor; use ReportedPollerGroup when an omitted value must remain unknown.</summary>
+    [JsonIgnore]
+    public int PollerGroup { get => ReportedPollerGroup ?? 0; set => ReportedPollerGroup = value; }
 
     /// <summary>The raw SNMP system description, e.g. "Onyx,SN2010M,SWv3.10.4408" - a one-line hardware/firmware summary LibreNMS's own device page shows prominently at the top.</summary>
     [JsonPropertyName("sysDescr")]
@@ -110,7 +118,11 @@ public sealed class Device
 
     /// <summary>Excludes this device from fleet-wide up/down availability figures without disabling polling or alerting for it - distinct from <see cref="Ignore"/>.</summary>
     [JsonPropertyName("ignore_status")]
-    public bool IgnoreStatus { get; set; }
+    public bool? ReportedIgnoreStatus { get; set; }
+
+    /// <summary>Compatibility accessor; use ReportedIgnoreStatus when an omitted value must remain unknown.</summary>
+    [JsonIgnore]
+    public bool IgnoreStatus { get => ReportedIgnoreStatus ?? false; set => ReportedIgnoreStatus = value; }
 
     /// <summary>The device's SNMP sysObjectID, e.g. ".1.3.6.1.4.1.33049.1.1.1.201015" - identifies the vendor/model MIB, mainly useful for cross-referencing against vendor documentation.</summary>
     [JsonPropertyName("sysObjectID")]
@@ -142,16 +154,32 @@ public sealed class Device
 
     /// <summary>1 = up, 0 = down.</summary>
     [JsonPropertyName("status")]
-    public bool Status { get; set; }
+    public bool? ReportedStatus { get; set; }
+
+    /// <summary>Compatibility accessor; use ReportedStatus when an omitted value must remain unknown.</summary>
+    [JsonIgnore]
+    public bool Status { get => ReportedStatus ?? false; set => ReportedStatus = value; }
 
     [JsonPropertyName("disabled")]
-    public bool Disabled { get; set; }
+    public bool? ReportedDisabled { get; set; }
+
+    /// <summary>Compatibility accessor; use ReportedDisabled when an omitted value must remain unknown.</summary>
+    [JsonIgnore]
+    public bool Disabled { get => ReportedDisabled ?? false; set => ReportedDisabled = value; }
 
     [JsonPropertyName("ignore")]
-    public bool Ignore { get; set; }
+    public bool? ReportedIgnore { get; set; }
+
+    /// <summary>Compatibility accessor; use ReportedIgnore when an omitted value must remain unknown.</summary>
+    [JsonIgnore]
+    public bool Ignore { get => ReportedIgnore ?? false; set => ReportedIgnore = value; }
 
     [JsonPropertyName("uptime")]
-    public long Uptime { get; set; }
+    public long? ReportedUptime { get; set; }
+
+    /// <summary>Compatibility accessor; use ReportedUptime when an omitted value must remain unknown.</summary>
+    [JsonIgnore]
+    public long Uptime { get => ReportedUptime ?? 0; set => ReportedUptime = value; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalData { get; set; }
@@ -174,6 +202,18 @@ public sealed class Device
         Ignore ? DeviceState.Ignored :
         Status ? DeviceState.Up :
         DeviceState.Down;
+
+    /// <summary>
+    /// The state established by the returned flags. A hidden flag can change
+    /// the interpretation of status, so incomplete flags never imply up or down.
+    /// The legacy State accessor remains available for existing consumers.
+    /// </summary>
+    [JsonIgnore]
+    public DeviceState ReportedState => ReportedDisabled == true ? DeviceState.Disabled
+        : ReportedDisabled is null ? DeviceState.Unknown
+        : ReportedIgnore == true ? DeviceState.Ignored
+        : ReportedIgnore is null || ReportedStatus is null ? DeviceState.Unknown
+        : ReportedStatus.Value ? DeviceState.Up : DeviceState.Down;
 
     public override string ToString() => BestName;
 }
