@@ -101,6 +101,37 @@ public class AlertActionsTests
         Assert.Equal(new[] { server.Faults[1].Id }, server.Writes);
         Assert.Equal(server.Faults[1].Id, Assert.Single(result.Changed).Id);
         Assert.Equal(AlertState.Active, server.Faults[0].State);
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Unchanged);
+        Assert.Equal("Acknowledged 1 fault", result.Summary);
+    }
+
+    [Fact]
+    public async Task A_single_fault_unacknowledgement_does_not_report_untouched_siblings_as_failures()
+    {
+        var server = new FakeServer(perEntity: true, maxEntities: 20, faults: 3);
+        server.Faults.ForEach(f => f.State = AlertState.Acknowledged);
+
+        var result = await Actions(server).UnacknowledgeFaultAsync(server.Faults[1].ToAlert(), "checking");
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Unchanged);
+        Assert.Equal(server.Faults[1].Id, Assert.Single(result.Changed).Id);
+        Assert.Equal(AlertState.Acknowledged, server.Faults[0].State);
+        Assert.Equal("Returned to active 1 fault", result.Summary);
+    }
+
+    [Fact]
+    public async Task A_failed_single_fault_action_reports_only_the_requested_target_unchanged()
+    {
+        var server = new FakeServer(perEntity: true, maxEntities: 20, faults: 3);
+        server.FailWritesTo.Add(server.Faults[1].Id);
+
+        var result = await Actions(server).AcknowledgeFaultAsync(server.Faults[1].ToAlert(), "checking");
+
+        Assert.False(result.Succeeded);
+        Assert.Empty(result.Changed);
+        Assert.Equal(server.Faults[1].Id, Assert.Single(result.Unchanged).Id);
     }
 
     [Fact]

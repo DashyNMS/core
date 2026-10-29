@@ -231,9 +231,13 @@ public sealed class AlertActions
 
         var error = await WriteAsync(kind, target, note, untilClear, cancellationToken).ConfigureAwait(false);
 
-        // Report the whole group: if settings changed since the check, LibreNMS may have acted on more than asked.
+        // Include siblings that actually changed if the server's scope changed
+        // during the write, but an untouched sibling was never asked to change
+        // and must not count as a failed single-fault action.
         var after = await ReadGroupAsync(group, cancellationToken).ConfigureAwait(false);
-        return Result(kind, source, before.Where(a => !IsDone(kind, a)).ToList(), before.Where(a => IsDone(kind, a)).ToList(), after, error);
+        var done = after.Where(a => IsDone(kind, a)).Select(a => a.Identity).ToHashSet();
+        var targets = before.Where(a => !IsDone(kind, a) && (a.Identity == fault.Identity || done.Contains(a.Identity))).ToList();
+        return Result(kind, source, targets, before.Where(a => IsDone(kind, a)).ToList(), after, error);
     }
 
     private async Task<AlertActionResult> GroupAsync(AlertActionKind kind, AlertGroupKey group, string? note, bool untilClear, CancellationToken cancellationToken)
