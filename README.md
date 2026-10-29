@@ -54,6 +54,15 @@ Sensor definition readers accept schemas 1 and 2. They prefer the separate v2 fe
 
 Validated cached shards remain usable after an offline restart even when the index is stale. Failed updates back off for 15 minutes across the fleet; an explicit update retries immediately. Failed refreshes do not advance the last successful check or download every missing OS separately.
 
+Device reads expose nullable `ReportedStatus`, `ReportedDisabled`, `ReportedIgnore`,
+`ReportedUptime`, `ReportedOverrideSysLocation`, `ReportedIgnoreStatus` and
+`ReportedPollerGroup`. Omitted or null fields stay unknown, including across JSON
+round trips. Use `ReportedState` for display; incomplete flags yield
+`DeviceState.Unknown`. Existing scalar accessors and `State` retain their previous
+behaviour for source compatibility. Mobile adopts the reported values for
+restricted resources; desktop and MCP can adopt them when they need the same
+unknown-value distinction. This is an additive API in the 2.0 development stream.
+
 ## Build it
 
 You need the .NET 9 and .NET 10 SDKs.
