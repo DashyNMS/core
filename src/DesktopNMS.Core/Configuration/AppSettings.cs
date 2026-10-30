@@ -1006,6 +1006,14 @@ public sealed class DashboardWidget
     public int GraylogRangeSeconds { get; set; } = 900;
 
     /// <summary>
+    /// For an Event log or Graylog widget (desktop#552): the devices, groups
+    /// and locations it's kept to - see <see cref="Spotlights.SpotlightResolver"/>.
+    /// Empty for the whole network, which is what a layout saved before this
+    /// existed reads as.
+    /// </summary>
+    public List<Spotlights.SpotlightTarget> Spotlight { get; set; } = new();
+
+    /// <summary>
     /// Anything in the stored widget this version doesn't model - another
     /// widget type's settings, written by DashyNMS Mobile or a newer desktop -
     /// kept as it was so saving here never strips it (#196).
@@ -1040,6 +1048,7 @@ public sealed class DashboardWidget
         LogSearch = LogSearch,
         GraylogStreamId = GraylogStreamId,
         GraylogRangeSeconds = GraylogRangeSeconds,
+        Spotlight = Spotlight.Select(t => t.Clone()).ToList(),
         Extra =Extra is null ? null : new Dictionary<string, JsonElement>(Extra),
     };
 
@@ -1059,6 +1068,8 @@ public sealed class DashboardWidget
         if (LogCount > 100) LogCount = 100;
         if (GraylogRangeSeconds < 60) GraylogRangeSeconds = 60;
         Sensors ??= new List<PinnedSensor>();
+        Spotlight ??= new List<Spotlights.SpotlightTarget>();
+        Spotlight.RemoveAll(t => t is null);
     }
 }
 

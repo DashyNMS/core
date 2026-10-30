@@ -69,6 +69,9 @@ public interface IDashboardLayoutService
 
     /// <summary>Sets an Event log or Graylog widget's options (#202, #203): how many entries, the Event log's type filter, the search, and Graylog's stream and time range.</summary>
     void SetLogOptions(string widgetId, int count, string? type, string? search, string? graylogStreamId, int graylogRangeSeconds);
+
+    /// <summary>Keeps an Event log or Graylog widget to a Spotlight (desktop#552): devices, groups and locations, each once. Empty is the whole network.</summary>
+    void SetSpotlight(string widgetId, IReadOnlyList<DesktopNMS.Core.Spotlights.SpotlightTarget> spotlight);
 }
 
 public sealed class DashboardLayoutService : IDashboardLayoutService
@@ -292,6 +295,36 @@ public sealed class DashboardLayoutService : IDashboardLayoutService
         widget.LogSearch = search;
         widget.GraylogStreamId = graylogStreamId;
         widget.GraylogRangeSeconds = graylogRangeSeconds;
+        _settings.Save();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetSpotlight(string widgetId, IReadOnlyList<DesktopNMS.Core.Spotlights.SpotlightTarget> spotlight)
+    {
+        ArgumentNullException.ThrowIfNull(spotlight);
+
+        var widget = Find(widgetId);
+        if (widget is null)
+        {
+            return;
+        }
+
+        var distinct = new List<DesktopNMS.Core.Spotlights.SpotlightTarget>();
+        foreach (var target in spotlight)
+        {
+            if (!distinct.Any(t => t.SameAs(target)))
+            {
+                distinct.Add(target.Clone());
+            }
+        }
+
+        if (widget.Spotlight.Count == distinct.Count
+            && widget.Spotlight.Zip(distinct).All(pair => pair.First.SameAs(pair.Second) && pair.First.Name == pair.Second.Name))
+        {
+            return;
+        }
+
+        widget.Spotlight = distinct;
         _settings.Save();
         Changed?.Invoke(this, EventArgs.Empty);
     }
