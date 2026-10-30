@@ -66,6 +66,87 @@ public static class GraylogQuery
             ? query + " AND level: <=" + level.ToString(CultureInfo.InvariantCulture)
             : query;
 
+    /// <summary>
+    /// The longest query sent. Graylog takes the query in the URL, and a
+    /// longer one can be refused by Graylog or a proxy in front of it with an
+    /// obscure HTTP error.
+    /// </summary>
+    public const int MaxQueryLength = 3500;
+
+    /// <summary>
+    /// A dashboard card's query kept to a Spotlight (desktop#552): its
+    /// search, in Graylog's own syntax, and only messages from the
+    /// Spotlight's devices - <c>(search) AND source: ("a" OR "b")</c>.
+    /// Each device is matched by its hostname, display name, IP and sysName
+    /// (<see cref="DeviceAddresses"/> without a DNS lookup or its interface
+    /// addresses, which would cost calls per device on every poll). Devices
+    /// are added in order until the query would pass
+    /// <see cref="MaxQueryLength"/>; the rest are counted in
+    /// <see cref="GraylogSpotlightQuery.DevicesLeftOut"/> for the card to
+    /// mention. A whole-network scope gives the search alone, or "*"; a
+    /// Spotlight with no devices gives a null query - nothing to search.
+    /// </summary>
+    /// <param name="search">The card's search in Graylog syntax, or blank for everything.</param>
+    /// <param name="field">Graylog's field holding the source address (<c>GraylogSettings.QueryField</c>); blank is "source".</param>
+    /// <param name="scope">The worked-out Spotlight.</param>
+    /// <param name="devices">The app's device list, to find each device's addresses.</param>
+    public static GraylogSpotlightQuery ForSpotlight(string? search, string? field, Spotlights.SpotlightScope scope, IEnumerable<Device> devices)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(devices);
+
+        var trimmed = search?.Trim();
+        var hasSearch = !string.IsNullOrEmpty(trimmed) && trimmed != "*";
+        if (scope.IsWholeNetwork)
+        {
+            return new GraylogSpotlightQuery(hasSearch ? trimmed : "*", 0);
+        }
+
+        var byId = devices.GroupBy(d => d.DeviceId).ToDictionary(g => g.Key, g => g.First());
+        var inScope = scope.DeviceIds.Where(byId.ContainsKey).OrderBy(id => id).Select(id => byId[id]).ToList();
+        if (inScope.Count == 0)
+        {
+            return new GraylogSpotlightQuery(null, 0);
+        }
+
+        var prefix = hasSearch ? "(" + trimmed + ") AND " : string.Empty;
+        var queryField = string.IsNullOrWhiteSpace(field) ? "source" : field.Trim();
+        var addresses = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var included = 0;
+
+        foreach (var device in inScope)
+        {
+            var added = DeviceAddresses(device, null, null).Where(a => !seen.Contains(a)).ToList();
+            if (added.Count == 0)
+            {
+                included++;
+                continue;
+            }
+
+            var candidate = Sources(queryField, addresses.Concat(added));
+            if (included > 0 && prefix.Length + candidate.Length > MaxQueryLength)
+            {
+                break;
+            }
+
+            addresses.AddRange(added);
+            seen.UnionWith(added);
+            included++;
+        }
+
+        // Every device in scope had no address at all: nothing could match.
+        if (addresses.Count == 0)
+        {
+            return new GraylogSpotlightQuery(null, 0);
+        }
+
+        return new GraylogSpotlightQuery(prefix + Sources(queryField, addresses), inScope.Count - included);
+    }
+
+    private static string Sources(string field, IEnumerable<string> addresses)
+        => field + ": (\"" + string.Join("\" OR \"", addresses.Select(Escape)) + "\")";
+
     /// <summary>The stream filter LibreNMS passes: "streams:{id}", or null for every stream.</summary>
     public static string? StreamFilter(string? streamId) =>
         string.IsNullOrWhiteSpace(streamId) ? null : "streams:" + streamId;
@@ -252,3 +333,8 @@ public static class GraylogQuery
         return builder.ToString();
     }
 }
+
+/// <summary>A Spotlight card's Graylog query (see <see cref="GraylogQuery.ForSpotlight"/>).</summary>
+/// <param name="Query">The query, or null when the Spotlight has no devices to search for.</param>
+/// <param name="DevicesLeftOut">Devices that didn't fit under <see cref="GraylogQuery.MaxQueryLength"/>.</param>
+public sealed record GraylogSpotlightQuery(string? Query, int DevicesLeftOut);
