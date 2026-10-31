@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGraylogApi>(sp => sp.GetRequiredService<GraylogApi>());
 
         services.AddSingleton<IGitHubReleaseService, GitHubReleaseService>();
+        services.AddSingleton<Services.IDeviceLogoCache, Services.DeviceLogoCache>();
 
         return services;
     }

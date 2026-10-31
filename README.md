@@ -23,7 +23,7 @@ DashyNMS Core is the plain .NET library behind [DashyNMS desktop](https://github
 
 - **LibreNMS, Graylog and Unimus clients:** the API, with LibreNMS's quirks handled once (404s that mean "none", stringly-typed numbers, permission errors that mean "not this token").
 - **Alerting:** change detection between polls, counting, history, notification rules, and the rule builder's field catalogue.
-- **Monitors and caches:** the alert, device and sensor pollers, the device and rule caches, and the dashboard layout, including the Spotlight that keeps an event log or Graylog card to some devices, a group or a location. Each app supplies when it's in the background and whether it's signed in.
+- **Monitors and caches:** the alert, device and sensor pollers, the device and rule caches, a disk cache of the last 20 device logos viewed, and the dashboard layout, including the Spotlight that keeps an event log or Graylog card to some devices, a group or a location. Each app supplies when it's in the background and whether it's signed in.
 - **Graphs:** LibreNMS's graphs restyled to the app's theme, with the app's own legends.
 - **Sensor definitions:** optional OS-sharded data with exact and source-derived type/context selectors. Unknown values, missing metadata and conflicting mappings remain unresolved.
 - **Sign-in, settings and the rest:** sign in with LibreNMS's own page, settings and the starter dashboard, and the open-source notices every app shows.

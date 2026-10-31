@@ -27,6 +27,9 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
     private HttpClient? _http;
     private HttpMessageHandler? _handler;
 
+    /// <summary>The web root <see cref="_http"/> talks to - the backup's own URL when on one that isn't just another route - for files outside the API.</summary>
+    private Uri? _webBase;
+
     /// <summary>The last certificate turned down under "Allow untrusted certificate", picked up by the request that failed on it (#189).</summary>
     private CertificateDetails? _rejectedCertificate;
     private LibreNmsConnection? _connection;
@@ -252,6 +255,7 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
             oldHttp = _http;
             oldHandler = _handler;
             _http = http;
+            _webBase = onBackup && !dialBackupHost ? connection.BackupWebRoot : connection.WebRoot;
 
             // The outer handler: disposing it disposes the sockets handler too.
             _handler = redirects;
@@ -276,6 +280,7 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
             oldHandler = _handler;
             _http = null;
             _handler = null;
+            _webBase = null;
             _connection = null;
         }
 
@@ -486,14 +491,17 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         return false;
     }
 
-    private async Task<string> SendRawWithRetriesAsync(string relativeUrl, CancellationToken cancellationToken)
+    private Task<string> SendRawWithRetriesAsync(string relativeUrl, CancellationToken cancellationToken)
+        => GetWithRetriesAsync(relativeUrl, () => SendRawOnceAsync(relativeUrl, cancellationToken), cancellationToken);
+
+    /// <summary>A GET with the same retry shape as SendAsync above - see its own comments for why.</summary>
+    private async Task<T> GetWithRetriesAsync<T>(string relativeUrl, Func<Task<T>> sendOnce, CancellationToken cancellationToken)
     {
-        // Same retry shape as SendAsync above - see its own comments for why.
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                return await SendRawOnceAsync(relativeUrl, cancellationToken).ConfigureAwait(false);
+                return await sendOnce().ConfigureAwait(false);
             }
             catch (LibreNmsApiException ex) when (attempt == 1 && ex.LooksLikeStaleConnection && !cancellationToken.IsCancellationRequested)
             {
@@ -565,6 +573,105 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
             }
 
             return content;
+        }
+    }
+
+    public Task<WebFile?> GetWebFileAsync(string webPath, int maxBytes, CancellationToken cancellationToken = default)
+    {
+        if (!IsPlainWebPath(webPath))
+        {
+            throw new ArgumentException("Expected a plain path under the web root.", nameof(webPath));
+        }
+
+        return TrackReachabilityAsync(() => GetWithRetriesAsync(webPath, () => GetWebFileOnceAsync(webPath, maxBytes, cancellationToken), cancellationToken));
+    }
+
+    /// <summary>Relative segments of letters, digits, dots, dashes and underscores only: the path can't climb out of the web root or name another host.</summary>
+    internal static bool IsPlainWebPath(string? webPath)
+        => !string.IsNullOrEmpty(webPath)
+            && webPath.Split('/').All(segment => segment.Length > 0
+                && segment != "." && segment != ".."
+                && segment.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_'));
+
+    private async Task<WebFile?> GetWebFileOnceAsync(string webPath, int maxBytes, CancellationToken cancellationToken)
+    {
+        HttpClient http;
+        Uri webBase;
+        lock (_sync)
+        {
+            http = _http ?? throw new LibreNmsApiException("Not connected to a LibreNMS server.");
+            webBase = _webBase!;
+        }
+
+        // An absolute address from the web root: the client's base is the API's.
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(webBase, webPath));
+        request.Headers.Accept.ParseAdd("image/svg+xml, image/png, image/*;q=0.8");
+        request.Options.Set(SameServerRedirectHandler.DontFollow, true);
+        var requestTimeout = RequestTimeout(webPath, Connection?.TimeoutSeconds ?? 30);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(requestTimeout);
+
+        try
+        {
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
+                .ConfigureAwait(false);
+
+            var status = (int)response.StatusCode;
+            if (status is >= 300 and < 400 || response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+            {
+                return null;
+            }
+
+            if (!IsSuccess(response.StatusCode))
+            {
+                throw new LibreNmsApiException(DescribeHttpFailure(response.StatusCode, webPath), response.StatusCode);
+            }
+
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (contentType is not null
+                && !contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                && !contentType.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            if (response.Content.Headers.ContentLength > maxBytes)
+            {
+                return null;
+            }
+
+            // Read one byte past the limit, so a body without a length that
+            // runs over is seen to and dropped rather than buffered whole.
+            await using var body = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
+            var buffer = new MemoryStream();
+            var chunk = new byte[16 * 1024];
+            int read;
+            while ((read = await body.ReadAsync(chunk, timeout.Token).ConfigureAwait(false)) > 0)
+            {
+                buffer.Write(chunk, 0, read);
+                if (buffer.Length > maxBytes)
+                {
+                    return null;
+                }
+            }
+
+            return new WebFile(buffer.ToArray(), contentType);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            throw new LibreNmsApiException(
+                $"The request to LibreNMS timed out after {requestTimeout.TotalSeconds:0} seconds.",
+                innerException: ex,
+                looksLikeStaleConnection: !timeout.IsCancellationRequested && IsStaleConnectionFailure(ex))
+            { IsTimeout = timeout.IsCancellationRequested || !IsStaleConnectionFailure(ex) };
+        }
+        catch (HttpRequestException ex)
+        {
+            throw TransportFailure(ex);
         }
     }
 

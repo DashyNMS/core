@@ -30,4 +30,15 @@ public class DeviceModelTests
         Assert.Null(device.LastPolled);
         Assert.Null(device.LastPolledTimeTaken);
     }
+
+    [Fact]
+    public void The_logo_file_name_is_read_rather_than_left_over()
+    {
+        const string json = """{"device_id":7,"os":"procurve","icon":"hpe.svg"}""";
+
+        var device = JsonSerializer.Deserialize<Device>(json, LibreNmsJson.Options)!;
+
+        Assert.Equal("hpe.svg", device.Icon);
+        Assert.False(device.AdditionalData?.ContainsKey("icon") ?? false);
+    }
 }

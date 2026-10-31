@@ -61,6 +61,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(AppTheme.System, store.Current.Theme);
         Assert.True(store.Current.ServerTimestampsAreUtc);
         Assert.True(store.Current.ShowRecentlyViewedDevices);
+        Assert.True(store.Current.ShowDeviceLogos);
         Assert.Equal(5, store.Current.RecentlyViewedDeviceCount);
         Assert.Equal(DeviceNameStyle.SysName, store.Current.DeviceNameStyle);
         Assert.Equal(StartupTab.Dashboard, store.Current.StartupTab);
@@ -92,6 +93,19 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(store.Current.DownloadUpdatesAutomatically);
         Assert.False(store.Current.IntelligenceSingleChatMode);
         Assert.Equal(DiagnosticsSharingPreference.Undecided, store.Current.DiagnosticsSharing);
+    }
+
+    [Fact]
+    public void Turning_device_logos_off_survives_save_reload_and_clone()
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.ShowDeviceLogos = false;
+
+        store.Save();
+
+        var reloaded = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        Assert.False(reloaded.Current.ShowDeviceLogos);
+        Assert.False(reloaded.Current.Clone().ShowDeviceLogos);
     }
 
     [Fact]

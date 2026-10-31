@@ -41,6 +41,25 @@ public interface ILibreNmsTransport
     /// </summary>
     Task<string> SendRawAsync(string relativeUrl, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Fetches a static file from under the LibreNMS web root (not the API),
+    /// such as <c>images/logos/hpe.svg</c>, with the same timeout, retry and
+    /// backup-address handling as the API calls. Returns null when the server
+    /// has no such file: LibreNMS answers a missing one with a redirect to its
+    /// login page rather than a 404, so a redirect, a 404, a body that isn't
+    /// an image or one over <paramref name="maxBytes"/> all count as missing.
+    /// Throws <see cref="LibreNmsApiException"/> when the server can't be
+    /// asked at all. A transport that can't fetch files (a test fake) has none.
+    /// </summary>
+    /// <param name="webPath">A path relative to the web root, made only of plain segments - no leading slash and no "..".</param>
+    Task<WebFile?> GetWebFileAsync(string webPath, int maxBytes, CancellationToken cancellationToken = default)
+        => Task.FromResult<WebFile?>(null);
+
     /// <summary>What this connection has learned it can't do (#51, #9) - null for a transport that doesn't track it, such as a test fake.</summary>
     ApiPermissions? Permissions => null;
 }
+
+/// <summary>A static file fetched from the LibreNMS web root - see <see cref="ILibreNmsTransport.GetWebFileAsync"/>.</summary>
+/// <param name="Content">The body, as sent.</param>
+/// <param name="ContentType">The media type the server gave it, if any (image/svg+xml).</param>
+public sealed record WebFile(byte[] Content, string? ContentType);
