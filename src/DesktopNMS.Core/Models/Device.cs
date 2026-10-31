@@ -39,6 +39,16 @@ public sealed class Device
     [JsonPropertyName("os")]
     public string? Os { get; set; }
 
+    /// <summary>
+    /// The logo LibreNMS picked for this device, as a bare file name (hpe.svg)
+    /// under the web root's images/logos/ - see Services.DeviceLogoCache.
+    /// LooseStringConverter as with <see cref="Location"/>: it comes from the
+    /// server, so an odd shape must not break the rest of the row.
+    /// </summary>
+    [JsonPropertyName("icon")]
+    [JsonConverter(typeof(DesktopNMS.Core.Json.LooseStringConverter))]
+    public string? Icon { get; set; }
+
     [JsonPropertyName("hardware")]
     public string? Hardware { get; set; }
 

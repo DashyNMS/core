@@ -59,6 +59,13 @@ public static class AppPaths
         }
     }
 
+    /// <summary>
+    /// Device logos fetched from the LibreNMS server - see Services.DeviceLogoCache,
+    /// which creates it when it first stores one. Under <see cref="DataDirectory"/>,
+    /// so demo mode and development builds keep their own.
+    /// </summary>
+    public static string LogoCacheDirectory => Path.Combine(DataDirectory, "cache", "logos");
+
     /// <summary>Where a downloaded update's installer waits to be run - see Updates.UpdatePackage.</summary>
     public static string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
 

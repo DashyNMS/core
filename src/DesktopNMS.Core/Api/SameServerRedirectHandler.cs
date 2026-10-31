@@ -30,6 +30,13 @@ internal sealed class SameServerRedirectHandler : DelegatingHandler
 
     internal const string TokenHeader = "X-Auth-Token";
 
+    /// <summary>
+    /// Set on a request whose redirect should come back as it is, unfollowed:
+    /// a static file LibreNMS doesn't have redirects to its login page, which
+    /// is a "not found" to the caller, not a page worth fetching.
+    /// </summary>
+    internal static readonly HttpRequestOptionsKey<bool> DontFollow = new("DashyNMS.DontFollowRedirects");
+
     /// <param name="inner">A handler with <c>AllowAutoRedirect</c> off - this one does the following.</param>
     public SameServerRedirectHandler(HttpMessageHandler inner)
         : base(inner)
@@ -41,6 +48,10 @@ internal sealed class SameServerRedirectHandler : DelegatingHandler
         var origin = request.RequestUri!;
         var current = request;
         var response = await base.SendAsync(current, cancellationToken).ConfigureAwait(false);
+        if (request.Options.TryGetValue(DontFollow, out var dontFollow) && dontFollow)
+        {
+            return response;
+        }
 
         for (var hops = 0; hops < MaxRedirects && IsRedirect(response.StatusCode); hops++)
         {

@@ -228,6 +228,13 @@ public sealed class AppSettings
     public bool ShowRecentlyViewedDevices { get; set; } = true;
 
     /// <summary>
+    /// Shows the device's own logo, fetched from the LibreNMS server and kept
+    /// on this computer (see Services.DeviceLogoCache), where an app has a
+    /// place for it. Off means nothing is fetched.
+    /// </summary>
+    public bool ShowDeviceLogos { get; set; } = true;
+
+    /// <summary>
     /// Pinning devices to the top of the Devices tab (#98). Off hides the pin
     /// column and actions and stops pinned devices sorting first, and takes
     /// "Pinned devices" off the Dashboard's widget menu - without forgetting
@@ -407,6 +414,7 @@ public sealed class AppSettings
         WelcomeDismissed = WelcomeDismissed,
         RecentlyViewedDevices = RecentlyViewedDevices.Select(d => d.Clone()).ToList(),
         ShowRecentlyViewedDevices = ShowRecentlyViewedDevices,
+        ShowDeviceLogos = ShowDeviceLogos,
         EnablePinnedDevices = EnablePinnedDevices,
         IntelligenceEnabled = IntelligenceEnabled,
         IntelligenceMascotEnabled = IntelligenceMascotEnabled,
