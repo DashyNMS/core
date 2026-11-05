@@ -61,7 +61,9 @@ public class PortGraphSeriesNamesTests
         var errors = GraphLegend.ForPort("port_errors", ["Errors in", "Errors out", "Discards in", "Discards out"], port);
 
         Assert.Equal(new[] { "3.2 Gb/s", "1 Mb/s" }, traffic.Select(e => e.Value));
-        Assert.Equal(new[] { "0.02/s", null, null, null }, errors.Select(e => e.Value));
+        // A supported missing reading is unavailable; unsupported discard
+        // series still have no value supplied by this model.
+        Assert.Equal(new[] { "0.02/s", "–", null, null }, errors.Select(e => e.Value));
     }
 
     [Theory]

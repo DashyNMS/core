@@ -63,6 +63,30 @@ behaviour for source compatibility. Mobile adopts the reported values for
 restricted resources; desktop and MCP can adopt them when they need the same
 unknown-value distinction. This is an additive API in the 2.0 development stream.
 
+### Graph legend availability
+
+`GraphLegend` keeps missing readings distinct from measured zero. Processor
+readings must be finite and within 0–100 inclusive; otherwise their value is
+`–`. Traffic, packet and error counter rates must be finite and non-negative.
+Negative rates are unavailable, never converted to a healthy zero. Signed sensor
+readings (for example temperature and dBm) retain their existing meaning.
+
+Device traffic is evaluated independently for In and Out across the existing
+eligible ports. An entirely unavailable direction, no eligible ports, or an
+unrepresentable sum/byte-to-bit conversion displays `–`. If some eligible ports
+have unavailable rates, the known subtotal displays, for example,
+`1 kb/s (incomplete)` (including `0 b/s (incomplete)` when the known readings are
+zero). This is only the known contribution, not an estimate of the device total.
+Port legends use `–` for unavailable supported readings; unsupported series still
+have null values. Valid values retain their units, rounding and culture behaviour.
+
+This is a non-breaking formatting correction in the existing 2.0 development
+stream: `GraphLegendEntry` and all method signatures, names, ordering, counts,
+SensorIds and SVG series identities are unchanged. No version bump or manual
+publication is needed. After review and merge, the existing main workflow tests
+and publishes `2.0.0-ci.N`; consumers should pin the exact resulting version and
+verify its repository commit metadata.
+
 ## Build it
 
 You need the .NET 9 and .NET 10 SDKs.

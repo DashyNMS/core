@@ -39,24 +39,23 @@ public static class GraphLegend
     public static IReadOnlyList<GraphLegendEntry> ForProcessors(IEnumerable<ProcessorSensor> processors)
         => processors
             .OrderBy(p => p.ProcessorId)
-            .Select(p => new GraphLegendEntry(p.Description ?? $"Processor {p.ProcessorId}", null, p.UsagePercent is { } usage ? $"{usage:0}%" : null))
+            .Select(p => new GraphLegendEntry(p.Description ?? $"Processor {p.ProcessorId}", null, p.UsagePercent is { } usage && double.IsFinite(usage) && usage >= 0 && usage <= 100 ? $"{(usage == 0 ? 0d : usage):0}%" : "–"))
             .ToList();
 
     /// <summary>
     /// In and Out, each the sum across the ports LibreNMS counts towards a
     /// device's traffic - leaving out loopbacks, tunnels, VLAN and LAG
     /// interfaces and the like, as its default device_traffic_iftype and
-    /// device_traffic_descr settings do.
+    /// device_traffic_descr settings do. Missing or invalid contributions make
+    /// a known subtotal explicitly incomplete; no readings or overflow yields "–".
     /// </summary>
     public static IReadOnlyList<GraphLegendEntry> ForTraffic(IEnumerable<Port> ports)
     {
         var counted = ports.Where(p => !p.Deleted && !p.Disabled && !p.Ignore && !IsLeftOutOfTraffic(p)).ToList();
-        var inBits = counted.Sum(p => p.IfInOctetsRate ?? 0) * 8;
-        var outBits = counted.Sum(p => p.IfOutOctetsRate ?? 0) * 8;
         return new[]
         {
-            new GraphLegendEntry("In", null, FormatRate(inBits)),
-            new GraphLegendEntry("Out", null, FormatRate(outBits)),
+            new GraphLegendEntry("In", null, FormatTraffic(counted.Select(p => p.IfInOctetsRate))),
+            new GraphLegendEntry("Out", null, FormatTraffic(counted.Select(p => p.IfOutOctetsRate))),
         };
     }
 
@@ -78,12 +77,37 @@ public static class GraphLegend
             _ => null,
         })).ToList();
 
-    private static string? Format(double? value, Func<double, string> format) => value is { } v ? format(v) : null;
+    // Keep unavailable contributions out of the subtotal, but never present that
+    // subtotal as a complete device total. Overflow cannot produce a useful subtotal.
+    private static string FormatTraffic(IEnumerable<double?> rates)
+    {
+        var total = 0d;
+        var known = false;
+        var incomplete = false;
+        foreach (var rate in rates)
+        {
+            if (rate is not { } value || !double.IsFinite(value) || value < 0)
+            {
+                incomplete = true;
+                continue;
+            }
+
+            known = true;
+            total += value;
+        }
+
+        var bits = total * 8;
+        if (!known || !double.IsFinite(bits)) return "–";
+        return FormatRate(bits) + (incomplete ? " (incomplete)" : string.Empty);
+    }
+
+    private static string Format(double? value, Func<double, string> format) => value is { } v ? format(v) : "–";
 
     /// <summary>Packets or errors a second: "0.02/s", "840/s", "1.2k/s".</summary>
     public static string FormatPerSecond(double perSecond)
     {
-        if (!double.IsFinite(perSecond)) return "–";
+        if (!double.IsFinite(perSecond) || perSecond < 0) return "–";
+        if (perSecond == 0) return "0/s";
         string[] units = ["", "k", "M", "G"];
         var value = perSecond;
         var unit = 0;
@@ -101,7 +125,8 @@ public static class GraphLegend
 
     public static string FormatRate(double bitsPerSecond)
     {
-        if (!double.IsFinite(bitsPerSecond)) return "–";
+        if (!double.IsFinite(bitsPerSecond) || bitsPerSecond < 0) return "–";
+        if (bitsPerSecond == 0) return "0 b/s";
         string[] units = ["b/s", "kb/s", "Mb/s", "Gb/s", "Tb/s"];
         var value = bitsPerSecond;
         var unit = 0;
