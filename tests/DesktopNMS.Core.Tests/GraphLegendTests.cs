@@ -65,6 +65,17 @@ public class GraphLegendTests
 
 public sealed class GraphLegendAvailabilityTests
 {
+    [Fact]
+    public void Signed_zero_remains_a_measured_zero_without_a_negative_sign()
+    {
+        var zero = BitConverter.Int64BitsToDouble(long.MinValue);
+        Assert.Equal("0 b/s", GraphLegend.FormatRate(zero));
+        Assert.Equal("0/s", GraphLegend.FormatPerSecond(zero));
+        Assert.Equal("0%", GraphLegend.ForProcessors([new ProcessorSensor { UsagePercent = zero }])[0].Value);
+        Assert.All(GraphLegend.ForPort("port_bits", ["In", "Out"],
+            new Port { IfInOctetsRate = zero, IfOutOctetsRate = zero }), row => Assert.Equal("0 b/s", row.Value));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(-1d)]

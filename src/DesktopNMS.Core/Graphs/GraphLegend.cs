@@ -39,7 +39,7 @@ public static class GraphLegend
     public static IReadOnlyList<GraphLegendEntry> ForProcessors(IEnumerable<ProcessorSensor> processors)
         => processors
             .OrderBy(p => p.ProcessorId)
-            .Select(p => new GraphLegendEntry(p.Description ?? $"Processor {p.ProcessorId}", null, p.UsagePercent is { } usage && double.IsFinite(usage) && usage >= 0 && usage <= 100 ? $"{usage:0}%" : "–"))
+            .Select(p => new GraphLegendEntry(p.Description ?? $"Processor {p.ProcessorId}", null, p.UsagePercent is { } usage && double.IsFinite(usage) && usage >= 0 && usage <= 100 ? $"{(usage == 0 ? 0d : usage):0}%" : "–"))
             .ToList();
 
     /// <summary>
@@ -107,6 +107,7 @@ public static class GraphLegend
     public static string FormatPerSecond(double perSecond)
     {
         if (!double.IsFinite(perSecond) || perSecond < 0) return "–";
+        if (perSecond == 0) return "0/s";
         string[] units = ["", "k", "M", "G"];
         var value = perSecond;
         var unit = 0;
@@ -125,6 +126,7 @@ public static class GraphLegend
     public static string FormatRate(double bitsPerSecond)
     {
         if (!double.IsFinite(bitsPerSecond) || bitsPerSecond < 0) return "–";
+        if (bitsPerSecond == 0) return "0 b/s";
         string[] units = ["b/s", "kb/s", "Mb/s", "Gb/s", "Tb/s"];
         var value = bitsPerSecond;
         var unit = 0;

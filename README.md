@@ -87,26 +87,6 @@ publication is needed. After review and merge, the existing main workflow tests
 and publishes `2.0.0-ci.N`; consumers should pin the exact resulting version and
 verify its repository commit metadata.
 
-Consumer audit for this correction:
-
-- Desktop calls `ForTraffic`, `ForProcessors` and `ForPort` from
-  `GraphsSectionViewModel` and displays `Value` directly. Upgrade its
-  `DashyNMSCoreVersion` pin (currently `2.0.0-ci.51`); no formatter duplication or
-  API migration is required. The GraphSweep sensor formatter is unchanged.
-- Mobile calls the same methods from `DeviceGraphsViewModel` and displays `Value`
-  directly. Upgrade its package reference from `2.0.0-ci.52` after publication,
-  then rerun its graph, legend and series regressions for mobile#542, #480 and
-  #442. Its sensor rows use the unchanged `FormatSensor` behaviour.
-- MCP's `GraphTools` requests LibreNMS PNGs with their server-rendered legends;
-  its source has no `GraphLegend` references. No graph behaviour or tool change
-  is needed. It can upgrade `DashyNMSCoreVersion` in `Directory.Build.props`, currently `2.0.0-ci.34`,
-  through its usual package update process.
-
-Regression fixtures use synthetic values only. Core CI runs the suite for both
-.NET targets on Windows, Linux and macOS; local execution is not required for
-this change's implementation environment.
-
-
 ## Build it
 
 You need the .NET 9 and .NET 10 SDKs.
