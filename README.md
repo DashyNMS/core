@@ -63,6 +63,50 @@ behaviour for source compatibility. Mobile adopts the reported values for
 restricted resources; desktop and MCP can adopt them when they need the same
 unknown-value distinction. This is an additive API in the 2.0 development stream.
 
+### Graph legend availability
+
+`GraphLegend` keeps missing readings distinct from measured zero. Processor
+readings must be finite and within 0–100 inclusive; otherwise their value is
+`–`. Traffic, packet and error counter rates must be finite and non-negative.
+Negative rates are unavailable, never converted to a healthy zero. Signed sensor
+readings (for example temperature and dBm) retain their existing meaning.
+
+Device traffic is evaluated independently for In and Out across the existing
+eligible ports. An entirely unavailable direction, no eligible ports, or an
+unrepresentable sum/byte-to-bit conversion displays `–`. If some eligible ports
+have unavailable rates, the known subtotal displays, for example,
+`1 kb/s (incomplete)` (including `0 b/s (incomplete)` when the known readings are
+zero). This is only the known contribution, not an estimate of the device total.
+Port legends use `–` for unavailable supported readings; unsupported series still
+have null values. Valid values retain their units, rounding and culture behaviour.
+
+This is a non-breaking formatting correction in the existing 2.0 development
+stream: `GraphLegendEntry` and all method signatures, names, ordering, counts,
+SensorIds and SVG series identities are unchanged. No version bump or manual
+publication is needed. After review and merge, the existing main workflow tests
+and publishes `2.0.0-ci.N`; consumers should pin the exact resulting version and
+verify its repository commit metadata.
+
+Consumer audit for this correction:
+
+- Desktop calls `ForTraffic`, `ForProcessors` and `ForPort` from
+  `GraphsSectionViewModel` and displays `Value` directly. Upgrade its
+  `DashyNMSCoreVersion` pin (currently `2.0.0-ci.51`); no formatter duplication or
+  API migration is required. The GraphSweep sensor formatter is unchanged.
+- Mobile calls the same methods from `DeviceGraphsViewModel` and displays `Value`
+  directly. Upgrade its package reference from `2.0.0-ci.52` after publication,
+  then rerun its graph, legend and series regressions for mobile#542, #480 and
+  #442. Its sensor rows use the unchanged `FormatSensor` behaviour.
+- MCP's `GraphTools` requests LibreNMS PNGs with their server-rendered legends;
+  its source has no `GraphLegend` references. No graph behaviour or tool change
+  is needed. It can upgrade `DashyNMSCoreVersion` in `Directory.Build.props`, currently `2.0.0-ci.34`,
+  through its usual package update process.
+
+Regression fixtures use synthetic values only. Core CI runs the suite for both
+.NET targets on Windows, Linux and macOS; local execution is not required for
+this change's implementation environment.
+
+
 ## Build it
 
 You need the .NET 9 and .NET 10 SDKs.
