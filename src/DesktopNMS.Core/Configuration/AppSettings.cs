@@ -315,6 +315,20 @@ public sealed class AppSettings
     /// <summary>Device Details' Ports table groups by this (#272): None, Status, Vlan, Type or Speed - text, so an unknown value reads as None. The same for every device.</summary>
     public string PortGroupBy { get; set; } = "None";
 
+    /// <summary>
+    /// Device Details' Ports tab shows its ports as a table or as cards (#82):
+    /// <see cref="PortsLayoutTable"/> or <see cref="PortsLayoutCards"/>. The table
+    /// by default, so settings saved before the choice existed keep today's view;
+    /// text rather than an enum so an unknown value from a newer or hand-edited
+    /// file reads as the table (<see cref="Normalise"/>) instead of failing the load.
+    /// The same for every device.
+    /// </summary>
+    public string PortsLayout { get; set; } = PortsLayoutTable;
+
+    public const string PortsLayoutTable = "Table";
+
+    public const string PortsLayoutCards = "Cards";
+
     /// <summary>Map nodes wobble like jelly when dragged, and their links bow and settle (#207). Purely visual - the saved layout is always where a node is dropped. On by default (#222), and does nothing while Windows animations are off.</summary>
     public bool JigglePhysicsOnMaps { get; set; } = true;
 
@@ -432,6 +446,7 @@ public sealed class AppSettings
         NeighbourViews = NeighbourViews.Select(v => v.Clone()).ToList(),
         PortGraphsCollapsed = PortGraphsCollapsed,
         PortGroupBy = PortGroupBy,
+        PortsLayout = PortsLayout,
         JigglePhysicsOnMaps = JigglePhysicsOnMaps,
         AccentColor = AccentColor,
         Theme = Theme,
@@ -468,6 +483,11 @@ public sealed class AppSettings
         if (DefaultLog is not (DefaultLogEvents or DefaultLogAlerts or DefaultLogGraylog))
         {
             DefaultLog = DefaultLogEvents;
+        }
+
+        if (PortsLayout is not (PortsLayoutTable or PortsLayoutCards))
+        {
+            PortsLayout = PortsLayoutTable;
         }
 
         if (string.IsNullOrWhiteSpace(MapTileUrl))

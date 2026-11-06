@@ -68,6 +68,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(store.Current.DownloadUpdatesAutomatically);
         Assert.False(store.Current.IntelligenceSingleChatMode);
         Assert.Equal(DiagnosticsSharingPreference.Undecided, store.Current.DiagnosticsSharing);
+        Assert.Equal(AppSettings.PortsLayoutTable, store.Current.PortsLayout);
     }
 
     [Fact]
@@ -93,6 +94,7 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.True(store.Current.DownloadUpdatesAutomatically);
         Assert.False(store.Current.IntelligenceSingleChatMode);
         Assert.Equal(DiagnosticsSharingPreference.Undecided, store.Current.DiagnosticsSharing);
+        Assert.Equal(AppSettings.PortsLayoutTable, store.Current.PortsLayout);
     }
 
     [Fact]
@@ -236,5 +238,52 @@ public sealed class SettingsStoreTests : IDisposable
         Assert.Equal(enabled, edited.IntelligenceSingleChatMode);
         edited.IntelligenceSingleChatMode = !enabled;
         Assert.Equal(enabled, settings.IntelligenceSingleChatMode);
+    }
+
+    [Fact]
+    public void A_new_settings_object_shows_ports_as_a_table()
+    {
+        Assert.Equal(AppSettings.PortsLayoutTable, new AppSettings().PortsLayout);
+    }
+
+    [Theory]
+    [InlineData(AppSettings.PortsLayoutTable)]
+    [InlineData(AppSettings.PortsLayoutCards)]
+    public void The_ports_layout_survives_save_reload_and_clone(string layout)
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.PortsLayout = layout;
+
+        store.Save();
+
+        var reloaded = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        Assert.Equal(layout, reloaded.Current.PortsLayout);
+        Assert.Equal(layout, reloaded.Current.Clone().PortsLayout);
+    }
+
+    [Fact]
+    public void Editing_a_clone_keeps_the_ports_layout_until_changed()
+    {
+        var settings = new AppSettings { PortsLayout = AppSettings.PortsLayoutCards };
+
+        var edited = settings.Clone();
+
+        Assert.Equal(AppSettings.PortsLayoutCards, edited.PortsLayout);
+        edited.PortsLayout = AppSettings.PortsLayoutTable;
+        Assert.Equal(AppSettings.PortsLayoutCards, settings.PortsLayout);
+    }
+
+    [Theory]
+    [InlineData("\"Grid\"")]
+    [InlineData("\"cards\"")]
+    [InlineData("\"\"")]
+    [InlineData("null")]
+    public void An_unknown_ports_layout_in_the_file_reads_as_the_table(string json)
+    {
+        File.WriteAllText(SettingsFile, "{ \"portsLayout\": " + json + " }");
+
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+
+        Assert.Equal(AppSettings.PortsLayoutTable, store.Current.PortsLayout);
     }
 }
