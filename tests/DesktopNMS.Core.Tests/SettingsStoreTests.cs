@@ -53,6 +53,51 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Checked_save_notifies_only_after_the_value_is_persisted()
+    {
+        ICheckedSettingsStore store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.IntelligenceEnabled = false;
+        var calls = 0;
+        store.Changed += (_, _) =>
+        {
+            calls++;
+            Assert.False(new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile).Current.IntelligenceEnabled);
+        };
+        Assert.True(store.TrySave());
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public void Checked_save_reports_failure_without_notifying_and_preserves_the_previous_file()
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.IntelligenceEnabled = false;
+        Assert.True(store.TrySave());
+        // A directory at the temporary-file path fails on Windows, macOS and Linux,
+        // including privileged test processes where permissions-based failures do not.
+        Directory.CreateDirectory(SettingsFile + ".tmp");
+        store.Current.IntelligenceEnabled = true;
+        var calls = 0;
+        store.Changed += (_, _) => calls++;
+        Assert.False(store.TrySave());
+        Assert.Equal(0, calls);
+        Assert.True(store.Current.IntelligenceEnabled); // The caller owns rollback.
+        Assert.False(new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile).Current.IntelligenceEnabled);
+    }
+
+    [Fact]
+    public void Legacy_save_keeps_its_best_effort_notification_contract_on_failure()
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        Directory.CreateDirectory(SettingsFile + ".tmp");
+        var calls = 0;
+        store.Changed += (_, _) => calls++;
+        store.Save();
+        Assert.Equal(1, calls);
+        Assert.False(File.Exists(SettingsFile));
+    }
+
+    [Fact]
     public void A_fresh_install_gets_the_shipped_defaults()
     {
         var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);

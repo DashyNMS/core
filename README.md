@@ -65,6 +65,19 @@ behaviour for source compatibility. Mobile adopts the reported values for
 restricted resources; desktop and MCP can adopt them when they need the same
 unknown-value distinction. This is an additive API in the 2.0 development stream.
 
+### Checked settings persistence
+
+`SettingsStore` also implements the optional `ICheckedSettingsStore` interface.
+Its `TrySave()` returns false when a settings write fails and raises `Changed`
+only after a successful write. It does not roll back the live settings object on
+failure; the consumer owns rollback of its own edits. `ISettingsStore`, `Save`,
+`SaveQuietly`, the JSON format and existing implementations remain compatible.
+
+Mobile adopts this acknowledgement for Intelligence settings so a failed disk
+write cannot be presented as a saved change. Desktop and MCP need no changes
+and may opt in when they need persistence acknowledgement. This is an additive
+API in the next `2.0.0-ci.N` package, with no settings migration.
+
 ### Graph legend availability
 
 `GraphLegend` keeps missing readings distinct from measured zero. Processor

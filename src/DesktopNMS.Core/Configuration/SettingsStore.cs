@@ -30,8 +30,19 @@ public interface ISettingsStore
     void Replace(AppSettings settings);
 }
 
+/// <summary>Optional persistence acknowledgement without changing existing store implementations.</summary>
+public interface ICheckedSettingsStore : ISettingsStore
+{
+    /// <summary>
+    /// Writes Current and raises Changed only after a successful write. Returns false
+    /// on a write failure. The caller still owns mutations to Current and any rollback.
+    /// Existing Save and SaveQuietly retain their historical best-effort behaviour.
+    /// </summary>
+    bool TrySave();
+}
+
 /// <summary>JSON-backed settings, by default in %APPDATA%\DashyNMS\settings.json.</summary>
-public sealed class SettingsStore : ISettingsStore
+public sealed class SettingsStore : ICheckedSettingsStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -117,11 +128,19 @@ public sealed class SettingsStore : ISettingsStore
     /// </remarks>
     public void Save()
     {
-        var saved = Write();
+        var saved = Write().Settings;
         Changed?.Invoke(this, saved);
     }
 
-    private AppSettings Write()
+    /// <inheritdoc />
+    public bool TrySave()
+    {
+        var (saved, succeeded) = Write();
+        if (succeeded) Changed?.Invoke(this, saved);
+        return succeeded;
+    }
+
+    private (AppSettings Settings, bool Succeeded) Write()
     {
         AppSettings snapshot;
 
@@ -138,10 +157,11 @@ public sealed class SettingsStore : ISettingsStore
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Could not write {Path}", _settingsFile);
+                return (snapshot, false);
             }
         }
 
-        return snapshot;
+        return (snapshot, true);
     }
 
     public void Replace(AppSettings settings)
