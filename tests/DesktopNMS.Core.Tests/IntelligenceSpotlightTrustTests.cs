@@ -33,7 +33,7 @@ public sealed class IntelligenceSpotlightTrustTests
         Assert.Contains(
             "narrowed this conversation to device device_id=12; device group group_id=3; location location_id=4; " +
             "sensor sensor_id=73 on device_id=12; interface port_id=42 on device_id=12; " +
-            "alert alert_id=5 on device_id=12 (rule_id=4); fault alert_id=6 on device_id=12 (rule_id=4): exact, checked IDs.",
+            "alert alert_id=5 on device_id=12 (rule_id=4); fault alert_id=6 on device_id=12 (rule_id=4), checked IDs.",
             request["instructions"]!.GetValue<string>(), StringComparison.Ordinal);
 
         // The user's turn is only their question: the Spotlight isn't repeated there.
@@ -47,7 +47,7 @@ public sealed class IntelligenceSpotlightTrustTests
     {
         var scope = IntelligenceInstructions.Scope(EveryKind)!;
 
-        Assert.Matches("^[a-z_ =0-9;()]+$", scope);
+        Assert.Matches(@"^[a-z_ =0-9;()]+\z", scope);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class IntelligenceSpotlightTrustTests
     {
         var many = Enumerable.Range(1, 40).Select(id => new IntelligenceObjectReference("device", id)).ToList();
 
-        Assert.Equal("device device_id=7", IntelligenceInstructions.Scope([new("device", 7), new("device", 7)]));
+        Assert.Equal("device device_id=7", IntelligenceInstructions.Scope([new("device", 7), new("device", 7), new("device", 7, DeviceId: 3)]));
         Assert.Equal(IntelligenceInstructions.MaxSpotlightObjects, IntelligenceInstructions.Scope(many)!.Split("; ").Length);
     }
 
@@ -94,7 +94,7 @@ public sealed class IntelligenceSpotlightTrustTests
         await restored.AskAsync("Follow-up", [new("group", 3)]);
 
         var instructions = restored.Requests.Single()["instructions"]!.GetValue<string>();
-        Assert.Contains("narrowed this conversation to device group group_id=3:", instructions, StringComparison.Ordinal);
+        Assert.Contains("narrowed this conversation to device group group_id=3,", instructions, StringComparison.Ordinal);
         Assert.DoesNotContain("device_id=12", instructions, StringComparison.Ordinal);
         Assert.DoesNotContain("device_id", restored.Requests.Single()["input"]!.ToJsonString(), StringComparison.Ordinal);
     }

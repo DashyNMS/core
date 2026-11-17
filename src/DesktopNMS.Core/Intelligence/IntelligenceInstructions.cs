@@ -47,9 +47,9 @@ internal static class IntelligenceInstructions
     {
         var described = (spotlight ?? [])
             .Where(o => o is { IsValid: true })
-            .Distinct()
-            .Take(MaxSpotlightObjects)
             .Select(Describe)
+            .Distinct(StringComparer.Ordinal)
+            .Take(MaxSpotlightObjects)
             .ToList();
         return described.Count == 0 ? null : string.Join("; ", described);
     }

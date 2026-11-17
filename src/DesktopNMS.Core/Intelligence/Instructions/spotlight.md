@@ -1,2 +1,2 @@
 # Spotlight
-The user has narrowed this conversation to {scope}: exact, checked IDs. Keep lookups and answers there unless asked otherwise. Pass a device's ID as the device; for a group or location, get its name from list_groups_and_locations.
+The user narrowed this conversation to {scope}, checked IDs. Stay there unless asked otherwise. Pass each ID in the tool argument for its kind; for a group or location, get its name from list_groups_and_locations.

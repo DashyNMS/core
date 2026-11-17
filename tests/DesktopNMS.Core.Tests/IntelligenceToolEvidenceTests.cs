@@ -121,8 +121,25 @@ public sealed class IntelligenceToolEvidenceTests
 
         var sent = ConversationHarness.OutputFor(harness.Requests[1])!.GetValue<string>();
         Assert.StartsWith(Payload, sent, StringComparison.Ordinal);
-        Assert.EndsWith("[2 images from this lookup weren't shown to the user: they were empty, too large, not images or over the limit.]", sent, StringComparison.Ordinal);
+        Assert.EndsWith("[2 images from this lookup weren't attached for you or shown to the user: they were empty, too large, not images or over the limit of 2.]", sent, StringComparison.Ordinal);
         Assert.Empty(harness.Listener.Images);
+    }
+
+    [Fact]
+    public async Task Images_over_the_limit_are_noted_in_the_text_that_travels_with_the_shown_ones()
+    {
+        const string Payload = """{"status":"ok","summary":"Graphs attached.","data":{}}""";
+        IntelligenceImage Png() => new([1, 2, 3], "image/png");
+        var harness = new ConversationHarness(ConversationHarness.Calls("graph"), ConversationHarness.Answers("Here."));
+        harness.Tools.Results.Enqueue(new IntelligenceToolResult(Payload, false, [Png(), Png(), Png()]));
+
+        await harness.AskAsync("Traffic graphs?");
+
+        var parts = ConversationHarness.OutputFor(harness.Requests[1])!.AsArray();
+        Assert.Equal(Payload + "\n[1 image from this lookup wasn't attached for you or shown to the user: it was empty, too large, not an image or over the limit of 2.]",
+            parts[0]!["text"]!.GetValue<string>());
+        Assert.Equal(2, parts.Count(p => p!["type"]!.GetValue<string>() == "input_image"));
+        Assert.Equal(2, harness.Listener.Images.Count);
     }
 
     [Fact]

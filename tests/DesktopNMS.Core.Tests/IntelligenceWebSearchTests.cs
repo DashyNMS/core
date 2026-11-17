@@ -151,7 +151,7 @@ public sealed class IntelligenceWebSearchTests
         Assert.DoesNotContain("# Spotlight", plain, StringComparison.Ordinal);
         Assert.DoesNotContain("never include private device names", plain, StringComparison.Ordinal);
         Assert.Contains("Web search is disabled in Settings", plain, StringComparison.Ordinal);
-        Assert.Contains("narrowed this conversation to device device_id=12:", full, StringComparison.Ordinal);
+        Assert.Contains("narrowed this conversation to device device_id=12,", full, StringComparison.Ordinal);
         Assert.DoesNotContain("Web search is disabled", full, StringComparison.Ordinal);
 
         // #324: the old prompt was about 7,900 characters (8,500 evidence based).

@@ -391,8 +391,8 @@ public sealed class IntelligenceConversation
         {
             var withheld = offered.Count - images.Count;
             text += withheld == 1
-                ? "\n[1 image from this lookup wasn't shown to the user: it was empty, too large, not an image or over the limit.]"
-                : $"\n[{withheld} images from this lookup weren't shown to the user: they were empty, too large, not images or over the limit.]";
+                ? $"\n[1 image from this lookup wasn't attached for you or shown to the user: it was empty, too large, not an image or over the limit of {MaxImagesPerCall}.]"
+                : $"\n[{withheld} images from this lookup weren't attached for you or shown to the user: they were empty, too large, not images or over the limit of {MaxImagesPerCall}.]";
         }
 
         if (images.Count == 0)
