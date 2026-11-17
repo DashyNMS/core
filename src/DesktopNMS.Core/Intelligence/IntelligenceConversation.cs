@@ -380,10 +380,21 @@ public sealed class IntelligenceConversation
         foreach (var card in IntelligenceStatusCards.FromTool(name, result.Output, DateTimeOffset.UtcNow))
             listener.OnStatusCard(card);
 
-        var images = (result.Images ?? Array.Empty<IntelligenceImage>())
+        var offered = result.Images ?? Array.Empty<IntelligenceImage>();
+        var images = offered
             .Where(i => i.Data.Length is > 0 and <= IntelligenceImage.MaxBytes && i.MimeType.StartsWith("image/", StringComparison.Ordinal))
             .Take(MaxImagesPerCall)
             .ToList();
+
+        // The tool's own text may say a graph is attached: say which never reached the user.
+        if (offered.Count > images.Count)
+        {
+            var withheld = offered.Count - images.Count;
+            text += withheld == 1
+                ? "\n[1 image from this lookup wasn't shown to the user: it was empty, too large, not an image or over the limit.]"
+                : $"\n[{withheld} images from this lookup weren't shown to the user: they were empty, too large, not images or over the limit.]";
+        }
+
         if (images.Count == 0)
         {
             return text;
