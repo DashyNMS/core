@@ -101,7 +101,7 @@ public sealed class IntelligenceConversation
     }
 
     /// <summary>What the model is told for one answer - see <see cref="IntelligenceInstructions"/>.</summary>
-    internal static string BuildInstructions(string? detail, string? spotlight = null, bool webSearchEnabled = false)
+    internal static string BuildInstructions(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight = null, bool webSearchEnabled = false)
         => IntelligenceInstructions.Build(detail, spotlight, webSearchEnabled);
 
     /// <summary>
@@ -109,11 +109,11 @@ public sealed class IntelligenceConversation
     /// before each request, so a long investigation picks up a renewed token.
     /// </summary>
     /// <param name="spotlight">
-    /// What the user has narrowed the conversation to ("the device core-sw-01",
-    /// "the device group Core"), or null for the whole network. The model is
-    /// told to keep its lookups there.
+    /// The exact objects the user has narrowed the conversation to, already
+    /// checked on this connection, or null for the whole network. The model is
+    /// told their kinds and IDs - never their names - and to keep its lookups there.
     /// </param>
-    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, string? spotlight = null, bool webSearchEnabled = false, string? detail = null)
+    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, IReadOnlyCollection<IntelligenceObjectReference>? spotlight = null, bool webSearchEnabled = false, string? detail = null)
     {
         var instructions = BuildInstructions(detail, spotlight, webSearchEnabled);
 
