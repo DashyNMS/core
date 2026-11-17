@@ -77,6 +77,14 @@ public sealed class IntelligenceSpotlightTrustTests
     }
 
     [Fact]
+    public void References_differing_only_in_fields_left_unstated_never_crowd_out_another_object()
+    {
+        var sameDevice = Enumerable.Range(1, 40).Select(rule => new IntelligenceObjectReference("device", 7, RuleId: rule));
+
+        Assert.Equal("device device_id=7; device device_id=8", IntelligenceInstructions.Scope([.. sameDevice, new("device", 8)]));
+    }
+
+    [Fact]
     public void A_non_positive_rule_is_never_stated()
     {
         Assert.Equal("alert alert_id=5 on device_id=12", IntelligenceInstructions.Scope([new("alert", 5, 12, -1)]));
