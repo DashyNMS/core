@@ -1,2 +1,2 @@
 # Spotlight
-The user has narrowed this conversation to {scope}. Keep lookups and answers to it, passing the device, device group or location to tools that accept one, unless the user clearly asks about something else.
+The user narrowed this conversation to {scope}, checked IDs. Stay there unless asked otherwise. Pass each ID in the tool argument for its kind; for a group or location, get its name from list_groups_and_locations.

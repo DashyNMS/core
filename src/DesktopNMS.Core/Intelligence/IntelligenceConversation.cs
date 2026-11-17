@@ -101,7 +101,7 @@ public sealed class IntelligenceConversation
     }
 
     /// <summary>What the model is told for one answer - see <see cref="IntelligenceInstructions"/>.</summary>
-    internal static string BuildInstructions(string? detail, string? spotlight = null, bool webSearchEnabled = false)
+    internal static string BuildInstructions(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight = null, bool webSearchEnabled = false)
         => IntelligenceInstructions.Build(detail, spotlight, webSearchEnabled);
 
     /// <summary>
@@ -109,11 +109,11 @@ public sealed class IntelligenceConversation
     /// before each request, so a long investigation picks up a renewed token.
     /// </summary>
     /// <param name="spotlight">
-    /// What the user has narrowed the conversation to ("the device core-sw-01",
-    /// "the device group Core"), or null for the whole network. The model is
-    /// told to keep its lookups there.
+    /// The exact objects the user has narrowed the conversation to, already
+    /// checked on this connection, or null for the whole network. The model is
+    /// told their kinds and IDs - never their names - and to keep its lookups there.
     /// </param>
-    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, string? spotlight = null, bool webSearchEnabled = false, string? detail = null)
+    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, IReadOnlyCollection<IntelligenceObjectReference>? spotlight = null, bool webSearchEnabled = false, string? detail = null)
     {
         var instructions = BuildInstructions(detail, spotlight, webSearchEnabled);
 
@@ -380,10 +380,21 @@ public sealed class IntelligenceConversation
         foreach (var card in IntelligenceStatusCards.FromTool(name, result.Output, DateTimeOffset.UtcNow))
             listener.OnStatusCard(card);
 
-        var images = (result.Images ?? Array.Empty<IntelligenceImage>())
+        var offered = result.Images ?? Array.Empty<IntelligenceImage>();
+        var images = offered
             .Where(i => i.Data.Length is > 0 and <= IntelligenceImage.MaxBytes && i.MimeType.StartsWith("image/", StringComparison.Ordinal))
             .Take(MaxImagesPerCall)
             .ToList();
+
+        // The tool's own text may say a graph is attached: say which never reached the user.
+        if (offered.Count > images.Count)
+        {
+            var withheld = offered.Count - images.Count;
+            text += withheld == 1
+                ? $"\n[1 image from this lookup wasn't attached for you or shown to the user: it was empty, too large, not an image or over the limit of {MaxImagesPerCall}.]"
+                : $"\n[{withheld} images from this lookup weren't attached for you or shown to the user: they were empty, too large, not images or over the limit of {MaxImagesPerCall}.]";
+        }
+
         if (images.Count == 0)
         {
             return text;

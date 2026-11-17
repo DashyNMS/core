@@ -105,7 +105,7 @@ public sealed class IntelligenceWebSearchTests
         var handler = new ScriptedHandler(Stream("""{"type":"response.completed"}"""));
         var conversation = new IntelligenceConversation(new ResponsesClient(new HttpClient(handler)), new NetworkTools());
         await conversation.AskAsync("Network health?", "test-model", Token, new Listener(), CancellationToken.None,
-            spotlight: "device test-device", webSearchEnabled: true, detail: style);
+            spotlight: [new("device", 12)], webSearchEnabled: true, detail: style);
         var instructions = handler.Bodies[0]["instructions"]!.GetValue<string>();
         Assert.Contains("# Detail: " + expected, instructions);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(instructions, "# Detail: "));
@@ -132,7 +132,7 @@ public sealed class IntelligenceWebSearchTests
         Assert.Contains("[[bullet:critical]]", instructions);
         Assert.Contains("[[recommendation]]", instructions);
         Assert.Contains("never include private device names", instructions);
-        Assert.Contains("device test-device", instructions);
+        Assert.Contains("device device_id=12", instructions);
         Assert.Contains(handler.Bodies[0]["tools"]!.AsArray(), tool => tool?["type"]?.GetValue<string>() == "web_search");
         Assert.Contains(handler.Bodies[0]["tools"]!.AsArray(), tool => tool?["type"]?.GetValue<string>() == "namespace");
     }
@@ -145,13 +145,13 @@ public sealed class IntelligenceWebSearchTests
     public void Only_the_blocks_that_apply_are_sent_and_they_stay_within_budget(string style)
     {
         var plain = IntelligenceConversation.BuildInstructions(style);
-        var full = IntelligenceConversation.BuildInstructions(style, spotlight: "device test-device", webSearchEnabled: true);
+        var full = IntelligenceConversation.BuildInstructions(style, spotlight: [new("device", 12)], webSearchEnabled: true);
 
         // Without Spotlight or web search, neither one's guidance is sent.
         Assert.DoesNotContain("# Spotlight", plain, StringComparison.Ordinal);
         Assert.DoesNotContain("never include private device names", plain, StringComparison.Ordinal);
         Assert.Contains("Web search is disabled in Settings", plain, StringComparison.Ordinal);
-        Assert.Contains("narrowed this conversation to device test-device", full, StringComparison.Ordinal);
+        Assert.Contains("narrowed this conversation to device device_id=12,", full, StringComparison.Ordinal);
         Assert.DoesNotContain("Web search is disabled", full, StringComparison.Ordinal);
 
         // #324: the old prompt was about 7,900 characters (8,500 evidence based).
