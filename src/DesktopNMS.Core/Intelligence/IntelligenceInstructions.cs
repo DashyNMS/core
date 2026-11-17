@@ -16,8 +16,8 @@ internal static class IntelligenceInstructions
 
     private static readonly ConcurrentDictionary<string, string> Blocks = new(StringComparer.Ordinal);
 
-    /// <summary>The most Spotlight objects described; the apps allow fewer.</summary>
-    internal const int MaxSpotlightObjects = 20;
+    /// <summary>The most Spotlight objects described: as many as desktop lets a chat hold.</summary>
+    internal const int MaxSpotlightObjects = 32;
 
     public static string Build(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight, bool webSearchEnabled)
     {

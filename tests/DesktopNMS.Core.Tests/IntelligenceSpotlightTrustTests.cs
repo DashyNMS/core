@@ -70,7 +70,7 @@ public sealed class IntelligenceSpotlightTrustTests
     [Fact]
     public void Repeats_are_stated_once_and_the_scope_is_bounded()
     {
-        var many = Enumerable.Range(1, 40).Select(id => new IntelligenceObjectReference("device", id)).ToList();
+        var many = Enumerable.Range(1, 50).Select(id => new IntelligenceObjectReference("device", id)).ToList();
 
         Assert.Equal("device device_id=7", IntelligenceInstructions.Scope([new("device", 7), new("device", 7), new("device", 7, DeviceId: 3)]));
         Assert.Equal(IntelligenceInstructions.MaxSpotlightObjects, IntelligenceInstructions.Scope(many)!.Split("; ").Length);
