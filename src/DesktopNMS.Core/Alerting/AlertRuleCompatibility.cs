@@ -265,12 +265,17 @@ public static class AlertRuleCompatibility
         {
             // Quoted values are data, not columns: a rule matching os = 'timeout' tests no column.
             var text = Regex.Replace(sql.Replace("`", string.Empty, StringComparison.Ordinal), @"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", "''");
-            var named = NamedTables(text);
+            var (named, aliases) = NamedTables(text);
             foreach (var removed in RemovedFields)
             {
                 var qualified = $@"(?<![\w.]){Regex.Escape(removed.Table)}\.{Regex.Escape(removed.Column)}(?!\w)";
+
+                // A bare column, but not a qualifier ("port.device_id") or an
+                // alias being declared ("JOIN ports AS port"), and never a
+                // name the query uses as an alias.
+                var bare = $@"(?<![\w.])(?<!\bas\s+){Regex.Escape(removed.Column)}(?![\w.])";
                 if (Regex.IsMatch(text, qualified, RegexOptions.IgnoreCase)
-                    || (BareMeansOnly(removed, named) && Regex.IsMatch(text, $@"(?<![\w.]){Regex.Escape(removed.Column)}(?!\w)", RegexOptions.IgnoreCase)))
+                    || (!aliases.Contains(removed.Column) && BareMeansOnly(removed, named) && Regex.IsMatch(text, bare, RegexOptions.IgnoreCase)))
                 {
                     found.Add(removed);
                 }
@@ -302,27 +307,46 @@ public static class AlertRuleCompatibility
                && owners.All(t => t.Equals(removed.Table, StringComparison.OrdinalIgnoreCase) || !named.Contains(t));
     }
 
-    /// <summary>The tables a query names after FROM (including comma lists) or JOIN.</summary>
-    private static IReadOnlySet<string> NamedTables(string sql)
+    private static readonly char[] SqlWhitespace = [' ', '\t', '\r', '\n'];
+
+    /// <summary>The tables a query names after FROM (including comma lists) or JOIN, and the aliases it gives them.</summary>
+    private static (IReadOnlySet<string> Tables, IReadOnlySet<string> Aliases) NamedTables(string sql)
     {
         var tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match from in Regex.Matches(sql, @"\bfrom\s+([\w\s,]+?)(?=\bwhere\b|\bjoin\b|\bleft\b|\binner\b|\bright\b|\bon\b|\(|\)|$)", RegexOptions.IgnoreCase))
+        var aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string declaration)
         {
-            foreach (var part in from.Groups[1].Value.Split(','))
+            var words = declaration.Trim().Split(SqlWhitespace, StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length == 0)
             {
-                if (part.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() is { } table)
-                {
-                    tables.Add(table);
-                }
+                return;
+            }
+
+            tables.Add(words[0]);
+            var alias = words.Length >= 3 && words[1].Equals("as", StringComparison.OrdinalIgnoreCase) ? words[2]
+                : words.Length >= 2 && !words[1].Equals("as", StringComparison.OrdinalIgnoreCase) ? words[1]
+                : null;
+            if (alias is not null)
+            {
+                aliases.Add(alias);
             }
         }
 
-        foreach (Match join in Regex.Matches(sql, @"\bjoin\s+(\w+)", RegexOptions.IgnoreCase))
+        foreach (Match from in Regex.Matches(sql, @"\bfrom\s+([\w\s,]+?)(?=\bwhere\b|\bjoin\b|\bleft\b|\binner\b|\bright\b|\bon\b|\bgroup\b|\border\b|\blimit\b|\(|\)|;|$)", RegexOptions.IgnoreCase))
         {
-            tables.Add(join.Groups[1].Value);
+            foreach (var part in from.Groups[1].Value.Split(','))
+            {
+                Add(part);
+            }
         }
 
-        return tables;
+        foreach (Match join in Regex.Matches(sql, @"\bjoin\s+(\w+(?:\s+(?:as\s+)?(?!on\b)\w+)?)", RegexOptions.IgnoreCase))
+        {
+            Add(join.Groups[1].Value);
+        }
+
+        return (tables, aliases);
     }
 
     private static IEnumerable<string> BuilderFields(string? builderJson)

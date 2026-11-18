@@ -111,6 +111,9 @@ public class AlertRuleCompatibilityTests
     [InlineData("SELECT * FROM devices WHERE authlevel = 'authPriv'", "devices.authlevel")]
     [InlineData("SELECT * FROM devices,ports_fdb WHERE `ports_fdb`.`vlan_id` = 12", "ports_fdb.vlan_id")]
     [InlineData("SELECT * FROM devices,ports_fdb WHERE vlan_id = 12", "ports_fdb.vlan_id")]
+    [InlineData("SELECT vlan_id FROM ports_fdb;", "ports_fdb.vlan_id")] // a terminated statement
+    [InlineData("SELECT vlan_id FROM ports_fdb\nAS f WHERE vlan_id = 12", "ports_fdb.vlan_id")] // a newline before the alias
+    [InlineData("SELECT vlan_id FROM\tports_fdb WHERE vlan_id = 12", "ports_fdb.vlan_id")]
     [InlineData("SELECT * FROM devices LEFT JOIN proxmox ON proxmox.device_id = devices.device_id WHERE proxmox.vmid = 100", "proxmox.vmid")]
     [InlineData("SELECT * FROM devices,processors WHERE processors.entPhysicalIndex = 1", "processors.entPhysicalIndex")]
     public void Raw_sql_using_26_11_removals_is_found(string sql, string field)
@@ -124,6 +127,8 @@ public class AlertRuleCompatibilityTests
     [InlineData("SELECT * FROM devices,ports_fdb WHERE ports_fdb.vlan = 12")] // the new field
     [InlineData("SELECT * FROM devices WHERE devices.os = 'timeout' AND devices.hardware LIKE \"%community%\"")] // values, not columns
     [InlineData("SELECT * FROM devices,services WHERE services.service_desc = 'transport'")]
+    [InlineData("SELECT * FROM devices JOIN ports AS port ON port.device_id = devices.device_id")] // an alias, not devices.port
+    [InlineData("SELECT * FROM devices JOIN ports port ON port.device_id = devices.device_id")]
     public void Sql_naming_unrelated_columns_is_clean_on_26_11(string sql)
         => Assert.Empty(AlertRuleCompatibility.FindRemovedColumns(null, sql, V26_11));
 
