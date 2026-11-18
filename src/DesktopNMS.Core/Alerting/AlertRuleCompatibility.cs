@@ -72,7 +72,7 @@ public sealed record RemovedConditionField(string Field, Version RemovedIn, stri
 public static class AlertRuleCompatibility
 {
     private const string PollingMethodAdvice =
-        "LibreNMS 26.11 moved SNMP settings from devices to per-device polling methods, so devices.{0} is gone. Test device_polling_methods (method_type, enabled) instead, or remove the condition.";
+        "From LibreNMS 26.11, SNMP settings live in per-device polling methods and devices.{0} no longer exists. Test device_polling_methods (method_type, enabled) instead, or remove the condition.";
 
     private const string ProxmoxAdvice =
         "LibreNMS 26.11 removed the Proxmox application and its proxmox table. Proxmox VMs now appear in vminfo through the Proxmox API polling method; use vminfo fields such as vminfo.cluster_id or vminfo.vmwVmDisplayName.";
