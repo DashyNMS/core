@@ -1,0 +1,4 @@
+{ "status": "ok", "ip_networks": [
+  { "ipv4_network_id": 7, "ipv4_network": "192.0.2.0/24", "context_name": "" },
+  { "ipv4_network_id": 9, "ipv4_network": "192.0.0.0/16", "context_name": "" },
+  { "ipv4_network_id": 8, "ipv4_network": "198.51.100.0/24", "context_name": "" } ], "count": 3 }

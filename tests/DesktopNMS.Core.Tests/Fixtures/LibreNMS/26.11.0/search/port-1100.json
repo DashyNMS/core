@@ -1,0 +1,1 @@
+{ "status": "ok", "port": [ { "port_id": 1100, "device_id": 1, "ifName": "Vlan2069", "ifDescr": "Vlan2069", "ifType": "propVirtual" } ] }

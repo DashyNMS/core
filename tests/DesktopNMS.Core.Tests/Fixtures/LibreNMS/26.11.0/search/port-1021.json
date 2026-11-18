@@ -1,0 +1,1 @@
+{ "status": "ok", "port": [ { "port_id": 1021, "device_id": 1, "ifName": "21", "ifType": "ethernetCsmacd" } ] }

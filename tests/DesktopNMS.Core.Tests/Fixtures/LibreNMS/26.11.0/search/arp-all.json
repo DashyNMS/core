@@ -1,0 +1,5 @@
+{ "status": "ok", "arp": [
+  { "id": 601, "port_id": 3069, "device_id": 3, "mac_address": "00005e005301", "ipv4_address": "192.0.2.200", "context_name": "" },
+  { "id": 501, "port_id": 3069, "device_id": 3, "mac_address": "00005e005368", "ipv4_address": "192.0.2.117", "context_name": "" },
+  { "id": 701, "port_id": 3070, "device_id": 3, "mac_address": "00005e005310", "ipv4_address": "198.51.100.10", "context_name": "" },
+  { "id": 702, "port_id": 3070, "device_id": 3, "mac_address": "00005e005311", "ipv4_address": "198.51.100.9", "context_name": "" } ], "count": 4 }

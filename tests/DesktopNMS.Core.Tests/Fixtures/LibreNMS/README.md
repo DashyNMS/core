@@ -9,7 +9,7 @@ are invented. Never commit a response copied from a real network.
 |---|---|
 | 26.9.1.1 | Legacy alerts: one row per rule and device (`/alerts`), no `fault_id` in the alert log; rules without per-entity settings, one using the since-removed `devices.last_ping_timetaken`; devices as every `devices` column, `override_sysContact` included |
 | 26.10.0 | Per-entity faults (`/faults`, `alert_faults`), `fault_id` in the alert log; rules with `notify_per_entity` and `max_entities` (inherited and set); devices as the explicit device resource (librenms#20595), no `override_sysContact`, credentials nulled; eight cores faulting together and their alert log (with older legacy and per-fault rows); device groups, a group's members, LibreNMS's empty-group 404, and the per-resource 403s for an alert and a device group; a forwarding table with internal VLAN ids (`vlan_id`) and the VLAN table they resolve through |
-| 26.11.0 | Forwarding-table entries with the direct 802.1Q `vlan` number instead of `vlan_id` (librenms#21152), including null, reserved and table-less numbers |
+| 26.11.0 | Forwarding-table entries with the direct 802.1Q `vlan` number instead of `vlan_id` (librenms#21152), including null, reserved and table-less numbers; `search/`: a synthetic network for Network Search (#91) - ARP, forwarding tables, ports by MAC, links, networks and their interfaces, an address with two MACs, a MAC on two access ports, and LibreNMS's "nothing found" and missing-route 404s |
 
 `LibreNms2610ScenarioTests` runs the #10 scenarios through Core against these. `LiveServerChecks` runs the
 read-only part of the integration run against a real server when `DASHYNMS_LIVE_URL` and

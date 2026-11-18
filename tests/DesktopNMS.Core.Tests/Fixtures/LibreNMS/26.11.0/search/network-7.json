@@ -1,0 +1,3 @@
+{ "status": "ok", "addresses": [
+  { "ipv4_address_id": 81, "ipv4_address": "192.0.2.11", "ipv4_prefixlen": 24, "ipv4_network_id": 7, "port_id": 1100, "context_name": "" },
+  { "ipv4_address_id": 80, "ipv4_address": "192.0.2.1", "ipv4_prefixlen": 24, "ipv4_network_id": 7, "port_id": 3069, "context_name": "" } ] }

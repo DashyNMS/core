@@ -1,0 +1,6 @@
+{ "status": "ok", "devices": [
+  { "device_id": 1, "hostname": "sw-access-01.example.net", "sysName": "sw-access-01", "ip": "192.0.2.11", "os": "ios" },
+  { "device_id": 2, "hostname": "sw-core-01.example.net", "sysName": "sw-core-01", "ip": "192.0.2.2", "os": "nxos" },
+  { "device_id": 3, "hostname": "fw-01.example.net", "sysName": "fw-01", "ip": "192.0.2.1", "os": "pfsense" },
+  { "device_id": 4, "hostname": "sw-spare-01.example.net", "sysName": "sw-spare-01", "ip": "192.0.2.14", "os": "arubaos-cx" }
+], "count": 4 }
