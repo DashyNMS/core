@@ -299,7 +299,9 @@ public interface IVlansApi
     /// internal <see cref="Vlan.VlanId"/> a caller would need to resolve
     /// <see cref="FdbEntry.VlanId"/> (the per-device /devices/{id}/vlans
     /// endpoint omits it), so this fetches the whole list and callers filter
-    /// by <see cref="Vlan.DeviceId"/> themselves.
+    /// by <see cref="Vlan.DeviceId"/> themselves. Read forwarding-table VLANs
+    /// through <see cref="DesktopNMS.Core.Devices.FdbVlanResolver"/>, which also
+    /// handles 26.11's direct numbers.
     /// </summary>
     Task<IReadOnlyList<Vlan>> ListAsync(CancellationToken cancellationToken = default);
 }
