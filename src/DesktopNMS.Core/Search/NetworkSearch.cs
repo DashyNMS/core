@@ -131,7 +131,9 @@ public sealed class NetworkSearch
         }
 
         // Pasted terms past the limit are reported by query.IgnoredTerms, not as coverage.
+        cancellationToken.ThrowIfCancellationRequested();
         candidates = Merge(candidates);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var page = candidates.Skip(offset).Take(_options.PageSize).ToList();
         IReadOnlyList<EndpointRecord> records;
@@ -200,16 +202,30 @@ public sealed class NetworkSearch
                 var arp = Clean(await run.Ask(SearchSource.Arp, ct => _arp.FindInNetworkAsync(term.Address!, term.PrefixLength!.Value, ct), []).ConfigureAwait(false));
                 var inNetwork = FromArp(arp).ToList();
                 inNetwork.AddRange(DevicesIn(devices, term).Where(d => inNetwork.All(c => !c.Addresses.Contains(d.Ip!))).Select(d => new Candidate([d.Ip!], [], [], d)));
+                await AddMonitoredInterfacesAsync(run, term, inNetwork).ConfigureAwait(false);
                 return inNetwork.OrderBy(c => AddressKey(c.Addresses.FirstOrDefault())).ToList();
             }
 
             case SearchTermKind.Ipv6Network:
+            {
                 run.Unavailable(SearchSource.NeighbourDiscovery, NoNeighbourDiscovery);
-                return DevicesIn(devices, term).Select(d => new Candidate([Compressed(IPAddress.Parse(d.Ip!))], [], [], d)).ToList();
+                var inNetwork = DevicesIn(devices, term).Select(d => new Candidate([Compressed(IPAddress.Parse(d.Ip!))], [], [], d)).ToList();
+                await AddMonitoredInterfacesAsync(run, term, inNetwork).ConfigureAwait(false);
+                return inNetwork.OrderBy(c => AddressKey(c.Addresses.FirstOrDefault())).ToList();
+            }
 
             case SearchTermKind.MacAddress:
             {
                 var arp = Clean(await run.Ask(SearchSource.Arp, ct => _arp.FindByMacAsync(term.Mac!, ct), []).ConfigureAwait(false));
+
+                // A MAC no router resolved is only an endpoint if a switch has learned it.
+                if (arp.Count == 0
+                    && (await LearnedAsync(run, term.Mac!).ConfigureAwait(false)).Count == 0
+                    && (await LearnedPortsAsync(run, term.Mac!).ConfigureAwait(false)).Count == 0)
+                {
+                    return [];
+                }
+
                 var addresses = arp.Select(a => a.Ipv4Address).OfType<string>().Distinct().ToList();
                 return [new Candidate(addresses, [term.Mac!], arp.ToList(), null)];
             }
@@ -267,8 +283,8 @@ public sealed class NetworkSearch
 
         var perMac = await Task.WhenAll(lookedUp.Select(async mac =>
         {
-            var fdb = run.Ask(SearchSource.ForwardingTable, ct => _fdb.FindByMacAsync(mac, ct), []);
-            var ports = run.Ask(SearchSource.ForwardingTable, ct => _ports.FindByLearnedMacAsync(mac, ct), []);
+            var fdb = LearnedAsync(run, mac);
+            var ports = LearnedPortsAsync(run, mac);
             var vendor = run.Ask(SearchSource.Vendors, ct => _fdb.FindVendorAsync(mac, ct), null);
             var others = candidate.Macs.Contains(mac) ? Task.FromResult<IReadOnlyList<ArpEntry>>([])
                 : run.Ask(SearchSource.Arp, ct => _arp.FindByMacAsync(mac, ct), []);
@@ -312,11 +328,18 @@ public sealed class NetworkSearch
             run.Note(SearchSource.ForwardingTable, $"Only {lookedUp.Count} of {macs.Count} MACs were looked up.", lookedUp.Count, macs.Count);
         }
 
+        // The VLAN table gives older servers' numbers and every server's names.
+        // Without it, 26.11's direct numbers still stand.
         var resolver = FdbVlanResolver.Empty;
-        if (FdbVlanResolver.NeedsVlanTable(fdbEntries))
+        if (fdbEntries.Count > 0)
         {
-            var vlans = await run.Ask(SearchSource.ForwardingTable, ct => _vlans.ListAsync(ct), []).ConfigureAwait(false);
-            resolver = new FdbVlanResolver(vlans);
+            var vlans = await run.Once("vlans", () => run.Quietly<IReadOnlyList<Vlan>>(ct => _vlans.ListAsync(ct))).ConfigureAwait(false);
+            if (vlans is null && FdbVlanResolver.NeedsVlanTable(fdbEntries))
+            {
+                run.Note(SearchSource.ForwardingTable, "The VLAN table couldn't be read, so older servers' VLANs are unknown.");
+            }
+
+            resolver = new FdbVlanResolver(vlans ?? []);
         }
 
         var links = fdbEntries.Count == 0 ? []
@@ -356,17 +379,30 @@ public sealed class NetworkSearch
             })
             .ToList();
 
+        // A port that learned the MAC (ports/mac) when its forwarding-table
+        // row couldn't be read is still a sighting, with its VLAN and time unknown.
+        foreach (var (mac, port) in perMac.SelectMany(m => m.Ports.Select(p => (m.Mac, p))))
+        {
+            if (locations.All(l => l.PortId != port.PortId || l.Mac != mac))
+            {
+                locations.Add(new EndpointLocation(
+                    mac, port.DeviceId, port.PortId, run.DeviceOf(port.DeviceId), PortOf(port.PortId) ?? port,
+                    null, null, port.FdbEntriesCount, linked.Contains(port.PortId),
+                    string.Equals(port.IfType, "ieee8023adLag", StringComparison.OrdinalIgnoreCase), null, IsStale: false));
+            }
+        }
+
+        // Stale per sighting: a MAC that moved is current on its new port and stale on the old one.
         var newest = locations.Max(l => l.UpdatedAt);
+        bool Stale(DateTime? seen) => seen is { } s && newest is { } n && n - s > _options.StaleAfter;
         var macRecords = macs.Select(mac =>
         {
             var seen = locations.Where(l => l.Mac == mac).Max(l => l.UpdatedAt);
-            var stale = seen is { } s && newest is { } n && n - s > _options.StaleAfter;
-            return new EndpointMac(mac, perMac.FirstOrDefault(m => m.Mac == mac).Vendor, seen, stale);
+            return new EndpointMac(mac, perMac.FirstOrDefault(m => m.Mac == mac).Vendor, seen, Stale(seen));
         }).ToList();
-        var staleMacs = macRecords.Where(m => m.IsStale).Select(m => m.Hex).ToHashSet();
 
         locations = locations
-            .Select(l => l with { IsStale = staleMacs.Contains(l.Mac) })
+            .Select(l => l with { IsStale = Stale(l.UpdatedAt) })
             .OrderBy(l => l.IsStale)
             .ThenBy(l => l.Kind == LocationKind.Uplink)
             .ThenBy(l => l.MacCount ?? int.MaxValue)
@@ -401,6 +437,7 @@ public sealed class NetworkSearch
             Names = Names(device),
             MonitoredDevice = device,
             MonitoredInterface = monitoredInterface,
+            MonitoredInterfacePortId = interfacePortId,
             Locations = locations,
             Neighbours = neighbours,
             Subnet = subnet.Network is null ? null : new EndpointSubnet(
@@ -423,7 +460,7 @@ public sealed class NetworkSearch
             return (null, [], null);
         }
 
-        var networks = await run.Once($"networks:{address.AddressFamily}", () => run.Ask(SearchSource.Networks, ct => _networks.ListAsync(address.AddressFamily, ct), [])).ConfigureAwait(false);
+        var networks = await NetworksAsync(run, address.AddressFamily).ConfigureAwait(false);
         var best = networks
             .Select(n => NetworkSearchQuery.TryParseNetwork(n.Cidr, out var b, out var p) ? (Row: n, Base: b, Prefix: p) : default)
             .Where(n => n.Row is not null && NetworkSearchQuery.Contains(n.Base, n.Prefix, address))
@@ -434,7 +471,7 @@ public sealed class NetworkSearch
             return (null, [], null);
         }
 
-        var members = await run.Once($"network:{best.Row.Id}", () => run.Ask(SearchSource.Networks, ct => _networks.ListAddressesAsync(best.Row.Id, ct), [])).ConfigureAwait(false);
+        var members = await MembersAsync(run, best.Row.Id, address.AddressFamily).ConfigureAwait(false);
         var interfaces = members
             .Where(m => m.Address is not null)
             .Select(m => new SubnetInterface(m.Address!, m.PrefixLength, m.PortId, null, null))
@@ -466,10 +503,57 @@ public sealed class NetworkSearch
             .OfType<ArpEntry>()
             .ToList();
 
-    /// <summary>Whether a looked-up endpoint was seen anywhere at all.</summary>
+    /// <summary>
+    /// Whether a looked-up endpoint was seen anywhere at all. A vendor name
+    /// isn't evidence: it comes from the MAC's prefix, not from the network.
+    /// </summary>
     private static bool HasEvidence(EndpointRecord record)
-        => record.Neighbours.Count > 0 || record.Locations.Count > 0 || record.IsMonitored || record.Subnet is not null
-           || record.Macs.Any(m => m.Vendor is not null);
+        => record.Neighbours.Count > 0 || record.Locations.Count > 0 || record.IsMonitored || record.Subnet is not null;
+
+    private Task<IReadOnlyList<FdbEntry>> LearnedAsync(Run run, string mac)
+        => run.Once("fdb:" + mac, () => run.Ask(SearchSource.ForwardingTable, ct => _fdb.FindByMacAsync(mac, ct), []));
+
+    private Task<IReadOnlyList<Port>> LearnedPortsAsync(Run run, string mac)
+        => run.Once("ports:" + mac, () => run.Ask(SearchSource.ForwardingTable, ct => _ports.FindByLearnedMacAsync(mac, ct), []));
+
+    private Task<IReadOnlyList<IpNetwork>> NetworksAsync(Run run, AddressFamily family)
+        => run.Once($"networks:{family}", () => run.Ask(SearchSource.Networks, ct => _networks.ListAsync(family, ct), []));
+
+    private Task<IReadOnlyList<IpNetworkAddress>> MembersAsync(Run run, int networkId, AddressFamily family)
+        => run.Once($"network:{family}:{networkId}", () => run.Ask(SearchSource.Networks, ct => _networks.ListAddressesAsync(networkId, family, ct), []));
+
+    /// <summary>The most networks a CIDR search reads the interfaces of.</summary>
+    private const int MaxNetworksPerSearch = 20;
+
+    /// <summary>
+    /// Monitored interface addresses inside a searched network that ARP and
+    /// the device list didn't already give - a router's own interfaces, or
+    /// IPv6 addresses, which have no ARP.
+    /// </summary>
+    private async Task AddMonitoredInterfacesAsync(Run run, SearchTerm term, List<Candidate> found)
+    {
+        var networks = await NetworksAsync(run, term.Address!.AddressFamily).ConfigureAwait(false);
+        var overlapping = networks
+            .Select(n => NetworkSearchQuery.TryParseNetwork(n.Cidr, out var b, out var p) ? (Row: n, Base: b, Prefix: p) : default)
+            .Where(n => n.Row is not null
+                        && (NetworkSearchQuery.Contains(term.Address, term.PrefixLength!.Value, n.Base) || NetworkSearchQuery.Contains(n.Base, n.Prefix, term.Address)))
+            .ToList();
+        if (overlapping.Count > MaxNetworksPerSearch)
+        {
+            run.Note(SearchSource.Networks, $"Only {MaxNetworksPerSearch} of {overlapping.Count} networks' interfaces were read.", MaxNetworksPerSearch, overlapping.Count);
+        }
+
+        var members = await Task.WhenAll(overlapping.Take(MaxNetworksPerSearch).Select(n => MembersAsync(run, n.Row.Id, term.Address.AddressFamily))).ConfigureAwait(false);
+        foreach (var member in members.SelectMany(m => m))
+        {
+            if (member.Address is { } text && IPAddress.TryParse(text, out var ip)
+                && NetworkSearchQuery.Contains(term.Address, term.PrefixLength!.Value, ip)
+                && found.All(c => !c.Addresses.Any(a => SameAddress(a, ip))))
+            {
+                found.Add(new Candidate([Compressed(ip)], [], [], run.DeviceAt(Compressed(ip))));
+            }
+        }
+    }
 
     private static IEnumerable<Candidate> FromArp(IEnumerable<ArpEntry> arp)
         => arp.Where(a => !string.IsNullOrWhiteSpace(a.Ipv4Address))
@@ -480,25 +564,28 @@ public sealed class NetworkSearch
     /// <summary>Candidates that share an address or MAC are one endpoint (a pasted list naming the same host twice).</summary>
     private static List<Candidate> Merge(List<Candidate> candidates)
     {
+        // Transitive: a MAC shared by two pasted addresses joins all three into one.
         var merged = new List<Candidate>();
         foreach (var candidate in candidates)
         {
-            var same = merged.FindIndex(m =>
-                m.Addresses.Intersect(candidate.Addresses).Any()
-                || m.Macs.Intersect(candidate.Macs).Any()
-                || (m.Device is not null && m.Device.DeviceId == candidate.Device?.DeviceId));
-            if (same < 0)
+            var joined = candidate;
+            for (var i = merged.Count - 1; i >= 0; i--)
             {
-                merged.Add(candidate);
-                continue;
+                var m = merged[i];
+                if (m.Addresses.Intersect(joined.Addresses).Any()
+                    || m.Macs.Intersect(joined.Macs).Any()
+                    || (m.Device is not null && m.Device.DeviceId == joined.Device?.DeviceId))
+                {
+                    joined = new Candidate(
+                        m.Addresses.Union(joined.Addresses).ToList(),
+                        m.Macs.Union(joined.Macs).ToList(),
+                        m.Arp.Concat(joined.Arp).DistinctBy(a => a.Id).ToList(),
+                        m.Device ?? joined.Device);
+                    merged.RemoveAt(i);
+                }
             }
 
-            var m = merged[same];
-            merged[same] = new Candidate(
-                m.Addresses.Union(candidate.Addresses).ToList(),
-                m.Macs.Union(candidate.Macs).ToList(),
-                m.Arp.Concat(candidate.Arp).DistinctBy(a => a.Id).ToList(),
-                m.Device ?? candidate.Device);
+            merged.Add(joined);
         }
 
         return merged;
@@ -515,9 +602,16 @@ public sealed class NetworkSearch
     /// <summary>Devices named <paramref name="text"/>: exact hostname, sysName or display name first, then any containing it.</summary>
     private static IReadOnlyList<Device> MatchNames(IReadOnlyList<Device> devices, string text)
     {
-        if (DeviceAddresses.Find(devices, text) is { } exact)
+        // Every exact match: two devices can report the same sysName.
+        var exact = devices.Where(d => SameAddress(d.Ip, text) || Names(d).Any(n => n.Equals(text, StringComparison.OrdinalIgnoreCase))).ToList();
+        if (exact.Count > 0)
         {
-            return [exact];
+            return exact;
+        }
+
+        if (DeviceAddresses.Find(devices, text) is { } shortName)
+        {
+            return [shortName];
         }
 
         return devices
@@ -539,6 +633,9 @@ public sealed class NetworkSearch
 
     private static string Title(IReadOnlyList<string> addresses, IReadOnlyList<string> macs, Device? device)
         => addresses.FirstOrDefault() ?? (macs.Count > 0 ? MacAddresses.Format(macs[0], MacAddressFormat.Colon) : null) ?? Names(device).FirstOrDefault() ?? string.Empty;
+
+    private static bool SameAddress(string? text, string other)
+        => IPAddress.TryParse(other, out var parsed) && SameAddress(text, parsed);
 
     private static bool SameAddress(string? text, IPAddress address)
         => IPAddress.TryParse(text, out var parsed) && (parsed.IsIPv4MappedToIPv6 ? parsed.MapToIPv4() : parsed).Equals(address);

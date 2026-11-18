@@ -46,7 +46,8 @@ public class NetworkSearchTests
             .Serve("resources/ip/networks/ipv4", Dir + "networks-ipv4.json")
             .Serve("resources/ip/networks/ipv6", Dir + "networks-ipv6.json", HttpStatusCode.NotFound)
             .Serve("resources/ip/networks/7/ip", Dir + "network-7.json")
-            .Serve("resources/vlans", "26.10.0/vlans.json");
+            .Serve("resources/ip/networks/", Dir + "network-empty.json", HttpStatusCode.NotFound)
+            .Serve("resources/vlans", Dir + "vlans.json");
     }
 
     private static NetworkSearch Search(LibreNmsFixtureServer server, NetworkSearchOptions? options = null)
@@ -78,7 +79,8 @@ public class NetworkSearchTests
         Assert.Equal("lagg1.2069", neighbour.Port!.IfName);
 
         Assert.Equal("192.0.2.0/24", host.Subnet!.Network); // the most specific network, not the /16
-        Assert.Equal(["192.0.2.1", "192.0.2.11"], host.Subnet.Interfaces.Select(i => i.Address));
+        Assert.Equal(["192.0.2.1", "192.0.2.11", "192.0.2.254"], host.Subnet.Interfaces.Select(i => i.Address)); // IPv4 only, though the IPv6 network shares the id
+        Assert.Equal("Displays", best.VlanName); // names come from the VLAN table on 26.11 too
         Assert.Equal("lagg1.2069", host.Subnet.Interfaces[0].Port!.IfName);
         Assert.False(host.IsMonitored);
         Assert.Empty(host.Conflicts);
@@ -119,9 +121,9 @@ public class NetworkSearchTests
         var second = await search.SearchAsync("192.0.2.0/24", offset: 2);
 
         Assert.Equal(NetworkSearchOutcome.List, first.Outcome);
-        Assert.Equal(6, first.Total); // two ARP hosts and four monitored devices
+        Assert.Equal(7, first.Total); // two ARP hosts, four monitored devices and a router interface
         Assert.Equal(["192.0.2.1", "192.0.2.2"], first.Endpoints.Select(e => e.Title));
-        Assert.Equal(4, first.Remaining);
+        Assert.Equal(5, first.Remaining);
         Assert.Equal(["192.0.2.11", "192.0.2.14"], second.Endpoints.Select(e => e.Title));
         Assert.All(first.Endpoints, e => Assert.False(e.IsDetailed));
         Assert.Equal(SourceState.NotQueried, first.CoverageOf(SearchSource.ForwardingTable)!.State);
@@ -185,6 +187,10 @@ public class NetworkSearchTests
         Assert.Equal(NetworkSearchOutcome.Single, result.Outcome);
         Assert.Equal(SourceState.PermissionDenied, result.CoverageOf(SearchSource.ForwardingTable)!.State);
         Assert.Single(result.Endpoints[0].Neighbours);
+
+        // The ports that learned it still show, with their VLANs unknown.
+        Assert.Equal([1019, 2037, 4001], result.Endpoints[0].Locations.Select(l => l.PortId).Order());
+        Assert.All(result.Endpoints[0].Locations, l => Assert.Null(l.VlanNumber));
     }
 
     [Fact]
@@ -238,20 +244,101 @@ public class NetworkSearchTests
 
         var result = await Search(server).SearchAsync("192.0.2.117");
 
-        var location = Assert.Single(result.Endpoints[0].Locations);
+        var location = result.Endpoints[0].Locations.Single(l => l.PortId == 1019);
         Assert.Equal(2074, location.VlanNumber); // internal id 50, never shown as VLAN 50
         Assert.Equal("Cameras", location.VlanName);
         Assert.Contains("resources/vlans", server.Requests);
     }
 
     [Fact]
-    public async Task New_forwarding_tables_skip_the_fleet_vlan_table()
+    public async Task Without_the_vlan_table_new_numbers_stand_without_names()
+    {
+        var server = Network(s => s.Serve("resources/vlans", Dir + "forbidden.json", HttpStatusCode.Forbidden));
+
+        var best = (await Search(server).SearchAsync("192.0.2.117")).Endpoints[0].BestLocation!;
+
+        Assert.Equal(2069, best.VlanNumber);
+        Assert.Null(best.VlanName);
+    }
+
+    [Fact]
+    public async Task A_router_interface_found_only_through_its_network_is_monitored_even_if_its_port_is_hidden()
+    {
+        var result = await Search(Network()).SearchAsync("192.0.2.254");
+
+        var host = Assert.Single(result.Endpoints);
+        Assert.True(host.IsMonitored);
+        Assert.Equal(3070, host.MonitoredInterfacePortId);
+        Assert.Null(host.MonitoredInterface);
+    }
+
+    [Fact]
+    public async Task Pasted_unknown_macs_are_not_endpoints()
+    {
+        var result = await Search(Network()).SearchAsync("00:00:5e:00:53:aa 00:00:5e:00:53:bb");
+
+        Assert.Equal(NetworkSearchOutcome.NotFound, result.Outcome);
+        Assert.Equal(0, result.Total);
+    }
+
+    [Fact]
+    public async Task Two_addresses_and_the_mac_they_share_are_one_endpoint()
+    {
+        var server = Network(s => s
+            .Serve("resources/ip/arp/192.0.2.118", Dir + "arp-118-same-mac.json")
+            .Serve("resources/ip/arp/00:00:5e:00:53:68", Dir + "arp-mac-368-both.json"));
+
+        var result = await Search(server).SearchAsync("192.0.2.117 192.0.2.118 00:00:5e:00:53:68");
+
+        Assert.Equal(NetworkSearchOutcome.Single, result.Outcome);
+        Assert.Equal(["192.0.2.117", "192.0.2.118"], result.Endpoints[0].Addresses.Order());
+    }
+
+    [Fact]
+    public async Task A_mac_that_moved_is_stale_on_its_old_port_only()
+    {
+        var server = Network(s => s
+            .Serve($"resources/fdb/{Host}/detail", Dir + "vendor-368.json")
+            .Serve($"resources/fdb/{Host}", Dir + "fdb-moved.json")
+            .Serve($"ports/mac/{Host}", Dir + "ports-mac-moved.json"));
+
+        var host = (await Search(server).SearchAsync("192.0.2.117")).Endpoints[0];
+
+        Assert.True(host.Locations.Single(l => l.PortId == 1021).IsStale);
+        Assert.False(host.Locations.Single(l => l.PortId == 1019).IsStale);
+        Assert.False(Assert.Single(host.Macs).IsStale);
+        Assert.Equal(1019, host.BestLocation!.PortId); // not the old port, though it held fewer MACs
+        Assert.Empty(host.Conflicts);
+    }
+
+    [Fact]
+    public async Task Two_devices_with_one_sysname_are_both_found()
+    {
+        var result = await Search(Network()).SearchAsync("ups-01");
+
+        Assert.Equal(NetworkSearchOutcome.List, result.Outcome);
+        Assert.Equal(2, result.Total);
+    }
+
+    [Fact]
+    public async Task A_long_paste_is_never_a_confirmed_absence()
+    {
+        var text = string.Join(' ', Enumerable.Range(1, 60).Select(i => $"203.0.113.{i}"));
+
+        var result = await Search(Network()).SearchAsync(text);
+
+        Assert.Equal(NetworkSearchOutcome.NotFound, result.Outcome);
+        Assert.False(result.IsConfirmedAbsent);
+    }
+
+    [Fact]
+    public async Task A_slash_zero_network_asks_for_the_whole_arp_table()
     {
         var server = Network();
 
-        await Search(server).SearchAsync("192.0.2.117");
+        await new LibreNmsResourceApis(server).Arp.FindInNetworkAsync(IPAddress.Any, 0);
 
-        Assert.DoesNotContain("resources/vlans", server.Requests);
+        Assert.Contains("resources/ip/arp/all", server.Requests);
     }
 
     [Fact]

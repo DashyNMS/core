@@ -103,6 +103,12 @@ public sealed partial class NetworkSearchQuery
         var slash = value.IndexOf('/');
         if (slash > 0 && TryPrefix(value[(slash + 1)..], out var prefix) && TryAddress(value[..slash], out var network))
         {
+            // ::ffff:192.0.2.0/120 is the IPv4 network 192.0.2.0/24.
+            if (network.AddressFamily == AddressFamily.InterNetwork && value[..slash].Contains(':') && prefix >= 96)
+            {
+                prefix -= 96;
+            }
+
             var max = network.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
             if (prefix >= 0 && prefix <= max)
             {

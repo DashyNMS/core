@@ -1,3 +1,5 @@
 { "status": "ok", "addresses": [
   { "ipv4_address_id": 81, "ipv4_address": "192.0.2.11", "ipv4_prefixlen": 24, "ipv4_network_id": 7, "port_id": 1100, "context_name": "" },
-  { "ipv4_address_id": 80, "ipv4_address": "192.0.2.1", "ipv4_prefixlen": 24, "ipv4_network_id": 7, "port_id": 3069, "context_name": "" } ] }
+  { "ipv4_address_id": 80, "ipv4_address": "192.0.2.1", "ipv4_prefixlen": 24, "ipv4_network_id": 7, "port_id": 3069, "context_name": "" },
+  { "ipv4_address_id": 82, "ipv4_address": "192.0.2.254", "ipv4_prefixlen": 24, "ipv4_network_id": 7, "port_id": 3070, "context_name": "" },
+  { "ipv6_address_id": 90, "ipv6_address": "2001:0db8:0000:0000:0000:0000:0000:0001", "ipv6_compressed": "2001:db8::1", "ipv6_prefixlen": 64, "ipv6_network_id": 7, "port_id": 3069, "context_name": "" } ] }

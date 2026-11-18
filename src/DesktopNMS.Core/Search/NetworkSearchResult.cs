@@ -170,8 +170,14 @@ public sealed class EndpointRecord
     /// <summary>The monitored device whose address this is, if any.</summary>
     public Device? MonitoredDevice { get; init; }
 
-    /// <summary>The monitored interface that holds this address, if any.</summary>
+    /// <summary>The monitored interface that holds this address, if any and if the account may read it.</summary>
     public Port? MonitoredInterface { get; init; }
+
+    /// <summary>
+    /// The port id of the monitored interface holding this address - set even
+    /// when the port itself couldn't be read, so the endpoint still counts as monitored.
+    /// </summary>
+    public int? MonitoredInterfacePortId { get; init; }
 
     /// <summary>Switch ports that learned its MACs, closest first: access ports before uplinks, fewest MACs first, newest first.</summary>
     public required IReadOnlyList<EndpointLocation> Locations { get; init; }
@@ -189,7 +195,7 @@ public sealed class EndpointRecord
     /// <summary>The port the endpoint most likely plugs into: the first current location that isn't an uplink.</summary>
     public EndpointLocation? BestLocation => Locations.FirstOrDefault(l => !l.IsStale && l.Kind != LocationKind.Uplink);
 
-    public bool IsMonitored => MonitoredDevice is not null || MonitoredInterface is not null;
+    public bool IsMonitored => MonitoredDevice is not null || MonitoredInterface is not null || MonitoredInterfacePortId is not null;
 }
 
 /// <summary>What kind of answer a search gave.</summary>
@@ -238,6 +244,7 @@ public sealed class NetworkSearchResult
     /// unavailable or failed, so the absence may just be a blind spot.
     /// </summary>
     public bool IsConfirmedAbsent => Outcome == NetworkSearchOutcome.NotFound
-                                     && Coverage.Where(c => c.State != SourceState.NotQueried)
+                                     && Query.IgnoredTerms == 0
+                                     && Coverage.Where(c => c.State != SourceState.NotQueried || c.IsTruncated)
                                          .All(c => c.IsComplete);
 }

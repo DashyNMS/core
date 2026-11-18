@@ -53,6 +53,7 @@ public class NetworkSearchQueryTests
     [InlineData("fw-01.example.net", SearchTermKind.Name, null)]
     [InlineData("10", SearchTermKind.Name, null)] // not shorthand for 0.0.0.10
     [InlineData("192.0.2.0/33", SearchTermKind.Name, null)] // no such prefix
+    [InlineData("::ffff:192.0.2.0/120", SearchTermKind.Ipv4Network, "192.0.2.0")] // an IPv4-mapped network
     [InlineData("192.0.2.0/+24", SearchTermKind.Name, null)]
     [InlineData("mac: 00:00:5e:00:53:68", SearchTermKind.MacAddress, null)]
     public void Terms_are_classified(string text, SearchTermKind kind, string? address)

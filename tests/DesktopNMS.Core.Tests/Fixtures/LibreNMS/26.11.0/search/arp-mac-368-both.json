@@ -1,0 +1,3 @@
+{ "status": "ok", "arp": [
+  { "id": 501, "port_id": 3069, "device_id": 3, "mac_address": "00005e005368", "ipv4_address": "192.0.2.117", "context_name": "" },
+  { "id": 503, "port_id": 3069, "device_id": 3, "mac_address": "00005e005368", "ipv4_address": "192.0.2.118", "context_name": "" } ], "count": 2 }
