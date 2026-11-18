@@ -338,9 +338,12 @@ public interface IIpNetworksApi
     /// <summary>
     /// GET /api/v0/resources/ip/networks/{id}/ip. The interface addresses
     /// LibreNMS has in one network - the monitored routers and hosts on it.
-    /// An empty network (a 404 upstream) is returned as empty.
+    /// An empty network (a 404 upstream) is returned as empty. IPv4 and IPv6
+    /// networks are numbered separately and LibreNMS answers an id with both
+    /// tables' addresses, so pass the network's <paramref name="family"/> to
+    /// get only its own.
     /// </summary>
-    Task<IReadOnlyList<IpNetworkAddress>> ListAddressesAsync(int networkId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<IpNetworkAddress>> ListAddressesAsync(int networkId, System.Net.Sockets.AddressFamily? family = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>VLAN endpoints.</summary>

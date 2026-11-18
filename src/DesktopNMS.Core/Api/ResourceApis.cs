@@ -578,12 +578,18 @@ internal sealed class IpNetworksApi : IIpNetworksApi
         }
     }
 
-    public async Task<IReadOnlyList<IpNetworkAddress>> ListAddressesAsync(int networkId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<IpNetworkAddress>> ListAddressesAsync(int networkId, System.Net.Sockets.AddressFamily? family = null, CancellationToken cancellationToken = default)
     {
         var url = "resources/ip/networks/" + networkId.ToString(CultureInfo.InvariantCulture) + "/ip";
         try
         {
-            return await _transport.GetCollectionAsync<IpNetworkAddress>(url, "addresses", cancellationToken).ConfigureAwait(false);
+            var members = await _transport.GetCollectionAsync<IpNetworkAddress>(url, "addresses", cancellationToken).ConfigureAwait(false);
+            return family switch
+            {
+                System.Net.Sockets.AddressFamily.InterNetwork => members.Where(m => m.Ipv4Address is not null).ToList(),
+                System.Net.Sockets.AddressFamily.InterNetworkV6 => members.Where(m => m.Ipv6Address is not null).ToList(),
+                _ => members,
+            };
         }
         catch (LibreNmsApiException ex) when (FdbApi.IsNoResults(ex))
         {
@@ -637,6 +643,13 @@ internal sealed class ArpApi : IArpApi
         RequireIpv4(network);
         ArgumentOutOfRangeException.ThrowIfNegative(prefixLength);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(prefixLength, 32);
+
+        // LibreNMS reads a /0 as "no prefix" and looks up the single address.
+        if (prefixLength == 0)
+        {
+            return ListAllAsync(cancellationToken);
+        }
+
         return _transport.GetCollectionAsync<ArpEntry>(
             "resources/ip/arp/" + network + "/" + prefixLength.ToString(CultureInfo.InvariantCulture), "arp", cancellationToken);
     }
