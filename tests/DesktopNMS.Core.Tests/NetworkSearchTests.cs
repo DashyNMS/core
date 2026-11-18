@@ -225,6 +225,9 @@ public class NetworkSearchTests
         Assert.Equal(SourceState.Unavailable, result.CoverageOf(SearchSource.ForwardingTable)!.State);
         Assert.Equal([1019, 2037, 4001], result.Endpoints[0].Locations.Select(l => l.PortId).Order());
         Assert.All(result.Endpoints[0].Locations, l => Assert.Null(l.MacCount));
+
+        // Without MAC counts an access port is neither direct nor shared, just unknown.
+        Assert.Equal(LocationKind.Unknown, result.Endpoints[0].Locations.Single(l => l.PortId == 1019).Kind);
     }
 
     [Fact]
@@ -258,6 +261,59 @@ public class NetworkSearchTests
 
         Assert.Equal(NetworkSearchOutcome.Single, result.Outcome);
         Assert.Equal(1019, result.Endpoints[0].BestLocation!.PortId);
+    }
+
+    [Fact]
+    public async Task An_unknown_mac_is_not_found_and_a_confirmed_absence()
+    {
+        var result = await Search(Network()).SearchAsync("00:00:5e:00:53:aa");
+
+        Assert.Equal(NetworkSearchOutcome.NotFound, result.Outcome);
+        Assert.Empty(result.Endpoints);
+        Assert.Equal(0, result.Total);
+        Assert.True(result.IsConfirmedAbsent);
+    }
+
+    [Fact]
+    public async Task A_rejected_token_is_thrown_so_the_app_can_ask_to_sign_in()
+    {
+        var server = Network(s => s.Serve("resources/ip/arp/", Dir + "forbidden.json", HttpStatusCode.Unauthorized));
+
+        var ex = await Assert.ThrowsAsync<LibreNmsApiException>(() => Search(server).SearchAsync("192.0.2.117"));
+
+        Assert.True(ex.IsAuthenticationFailure);
+    }
+
+    [Fact]
+    public async Task A_server_error_is_failed_not_empty()
+    {
+        var server = Network(s => s.Serve("resources/fdb/", Dir + "forbidden.json", HttpStatusCode.InternalServerError));
+
+        var result = await Search(server).SearchAsync("192.0.2.117");
+
+        Assert.Equal(SourceState.Failed, result.CoverageOf(SearchSource.ForwardingTable)!.State);
+    }
+
+    [Fact]
+    public async Task A_pasted_list_asks_for_the_network_list_once()
+    {
+        var server = Network();
+
+        await Search(server).SearchAsync("192.0.2.97 192.0.2.98 192.0.2.99");
+
+        Assert.Single(server.Requests, r => r == "resources/ip/networks/ipv4");
+    }
+
+    [Fact]
+    public async Task Export_gives_every_mac_a_row()
+    {
+        var result = await Search(Network()).SearchAsync("192.0.2.200");
+
+        var csv = NetworkSearchExport.ToCsv(result.Endpoints).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(3, csv.Length);
+        Assert.Contains(csv, l => l.Contains("00:00:5e:00:53:01", StringComparison.Ordinal));
+        Assert.Contains(csv, l => l.Contains("00:00:5e:00:53:02", StringComparison.Ordinal));
     }
 
     [Fact]

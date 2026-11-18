@@ -75,6 +75,9 @@ public enum LocationKind
 
     /// <summary>A link to another switch or an aggregate: seen in passing, not connected here.</summary>
     Uplink,
+
+    /// <summary>An access port whose MAC count couldn't be read, so direct and shared can't be told apart.</summary>
+    Unknown,
 }
 
 /// <summary>A switch port that has learned one of the endpoint's MACs.</summary>
@@ -104,7 +107,8 @@ public sealed record EndpointLocation(
     DateTime? UpdatedAt,
     bool IsStale)
 {
-    public LocationKind Kind => IsUplink || IsAggregate ? LocationKind.Uplink : MacCount == 1 ? LocationKind.Direct : LocationKind.Shared;
+    public LocationKind Kind => IsUplink || IsAggregate ? LocationKind.Uplink
+        : MacCount switch { null => LocationKind.Unknown, 1 => LocationKind.Direct, _ => LocationKind.Shared };
 }
 
 /// <summary>A router interface that has resolved the endpoint's address to a MAC.</summary>

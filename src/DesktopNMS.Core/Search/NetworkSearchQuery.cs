@@ -25,8 +25,10 @@ public enum SearchTermKind
 /// <param name="Mac">Twelve lowercase hex digits for <see cref="SearchTermKind.MacAddress"/>.</param>
 public sealed record SearchTerm(string Text, SearchTermKind Kind, IPAddress? Address = null, int? PrefixLength = null, string? Mac = null)
 {
+    /// <summary>A single IPv4 or IPv6 address.</summary>
     public bool IsAddress => Kind is SearchTermKind.Ipv4Address or SearchTermKind.Ipv6Address;
 
+    /// <summary>A CIDR network.</summary>
     public bool IsNetwork => Kind is SearchTermKind.Ipv4Network or SearchTermKind.Ipv6Network;
 }
 
@@ -61,6 +63,11 @@ public sealed partial class NetworkSearchQuery
 
     public bool IsEmpty => Terms.Count == 0;
 
+    /// <summary>
+    /// Reads a query: one term, or a pasted list when every piece is an
+    /// address, MAC or dotted hostname. Twelve bare hex digits read as a MAC,
+    /// as upstream reads them.
+    /// </summary>
     public static NetworkSearchQuery Parse(string? text)
     {
         var trimmed = (text ?? string.Empty).Trim();
@@ -94,7 +101,7 @@ public sealed partial class NetworkSearchQuery
         }
 
         var slash = value.IndexOf('/');
-        if (slash > 0 && int.TryParse(value[(slash + 1)..], out var prefix) && TryAddress(value[..slash], out var network))
+        if (slash > 0 && TryPrefix(value[(slash + 1)..], out var prefix) && TryAddress(value[..slash], out var network))
         {
             var max = network.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
             if (prefix >= 0 && prefix <= max)
@@ -143,7 +150,8 @@ public sealed partial class NetworkSearchQuery
         network = IPAddress.None;
         prefixLength = 0;
         var slash = cidr?.IndexOf('/') ?? -1;
-        if (slash <= 0 || !int.TryParse(cidr![(slash + 1)..], out prefixLength) || !TryAddress(cidr[..slash], out var parsed))
+        if (slash <= 0 || !TryPrefix(cidr![(slash + 1)..], out prefixLength) || !TryAddress(cidr[..slash], out var parsed)
+            || prefixLength > (parsed.AddressFamily == AddressFamily.InterNetwork ? 32 : 128))
         {
             return false;
         }
@@ -190,6 +198,10 @@ public sealed partial class NetworkSearchQuery
         _ => $"ip:{term.Address}/{term.PrefixLength}",
     };
 
+    /// <summary>Plain digits only: "+24" or " 24" is not a prefix length.</summary>
+    private static bool TryPrefix(string text, out int prefix)
+        => int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out prefix);
+
     private static bool LooksLikeHostname(string text) => Hostname().IsMatch(text);
 
     [GeneratedRegex(@"[\s,;]+")]
@@ -201,10 +213,10 @@ public sealed partial class NetworkSearchQuery
     [GeneratedRegex(@"^\[([0-9a-fA-F:.]+)\](:\d+)?$")]
     private static partial Regex BracketedIpv6();
 
-    [GeneratedRegex(@"^(\d{1,3}(?:\.\d{1,3}){3}):\d+$")]
+    [GeneratedRegex(@"^([0-9]{1,3}(?:\.[0-9]{1,3}){3}):[0-9]+$")]
     private static partial Regex Ipv4WithPort();
 
-    [GeneratedRegex(@"^\d{1,3}(\.\d{1,3}){3}$")]
+    [GeneratedRegex(@"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")]
     private static partial Regex Ipv4();
 
     /// <summary>A dotted name, the kind someone pastes a list of.</summary>

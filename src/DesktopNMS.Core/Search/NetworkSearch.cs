@@ -53,8 +53,12 @@ public sealed record NetworkSearchOptions
 /// <para>
 /// A search makes a bounded number of requests, at most
 /// <see cref="NetworkSearchOptions.MaxConcurrentRequests"/> at a time, and
-/// honours cancellation. Results are raised on the calling thread's
-/// continuation; nothing here touches a UI.
+/// honours cancellation. It raises no events and touches no UI: the caller
+/// awaits the result and marshals it as it needs. An expired or revoked
+/// token is thrown (<see cref="LibreNmsApiException.IsAuthenticationFailure"/>)
+/// rather than recorded, so an app can send the user to sign in. Paging
+/// re-runs the search: each page asks the sources again, so a page is as
+/// current as its request.
 /// </para>
 /// </remarks>
 public sealed class NetworkSearch
@@ -72,13 +76,13 @@ public sealed class NetworkSearch
     private readonly NetworkSearchOptions _options;
 
     public NetworkSearch(ILibreNmsClient client, NetworkSearchOptions? options = null)
-        : this(client?.Devices!, client?.Arp!, client?.Fdb!, client?.Ports!, client?.Vlans!, client?.Links!, client?.Networks!, options)
+        : this(NotNull(client).Devices, client.Arp, client.Fdb, client.Ports, client.Vlans, client.Links, client.Networks, options)
     {
     }
 
     /// <summary>Over Core's resource APIs on any transport - how a host's tests answer from recorded JSON.</summary>
     public NetworkSearch(LibreNmsResourceApis apis, NetworkSearchOptions? options = null)
-        : this(apis?.Devices!, apis?.Arp!, apis?.Fdb!, apis?.Ports!, apis?.Vlans!, apis?.Links!, apis?.Networks!, options)
+        : this(NotNull(apis).Devices, apis.Arp, apis.Fdb, apis.Ports, apis.Vlans, apis.Links, apis.Networks, options)
     {
     }
 
@@ -114,7 +118,7 @@ public sealed class NetworkSearch
         var candidates = new List<Candidate>();
         if (query.IsEmpty)
         {
-            var arp = await run.Ask(SearchSource.Arp, ct => _arp.ListAllAsync(ct), []).ConfigureAwait(false);
+            var arp = Clean(await run.Ask(SearchSource.Arp, ct => _arp.ListAllAsync(ct), []).ConfigureAwait(false));
             candidates.AddRange(FromArp(arp));
             run.NotQueried(SearchSource.ForwardingTable, "Search for an address or MAC to see where it is connected.");
         }
@@ -126,17 +130,22 @@ public sealed class NetworkSearch
             }
         }
 
+        // Pasted terms past the limit are reported by query.IgnoredTerms, not as coverage.
         candidates = Merge(candidates);
-        if (query.IgnoredTerms > 0)
-        {
-            run.Note(SearchSource.Arp, $"Only the first {NetworkSearchQuery.MaxTerms} pasted terms were searched.");
-        }
 
         var page = candidates.Skip(offset).Take(_options.PageSize).ToList();
         IReadOnlyList<EndpointRecord> records;
         if (candidates.Count == 1 && offset == 0)
         {
-            records = [await DetailAsync(run, page[0]).ConfigureAwait(false)];
+            var detail = await DetailAsync(run, page[0]).ConfigureAwait(false);
+
+            // A MAC nobody has seen anywhere is not an endpoint, however it was typed.
+            if (!HasEvidence(detail))
+            {
+                candidates.Clear();
+            }
+
+            records = candidates.Count == 0 ? [] : [detail];
         }
         else
         {
@@ -170,7 +179,7 @@ public sealed class NetworkSearch
         {
             case SearchTermKind.Ipv4Address:
             {
-                var arp = await run.Ask(SearchSource.Arp, ct => _arp.FindByAddressAsync(term.Address!, ct), []).ConfigureAwait(false);
+                var arp = Clean(await run.Ask(SearchSource.Arp, ct => _arp.FindByAddressAsync(term.Address!, ct), []).ConfigureAwait(false));
                 var found = FromArp(arp).ToList();
                 if (found.Count == 0 && (IsKnownAddress(devices, term.Address!) || await IsMonitoredAddressAsync(run, term.Address!).ConfigureAwait(false)))
                 {
@@ -188,7 +197,7 @@ public sealed class NetworkSearch
 
             case SearchTermKind.Ipv4Network:
             {
-                var arp = await run.Ask(SearchSource.Arp, ct => _arp.FindInNetworkAsync(term.Address!, term.PrefixLength!.Value, ct), []).ConfigureAwait(false);
+                var arp = Clean(await run.Ask(SearchSource.Arp, ct => _arp.FindInNetworkAsync(term.Address!, term.PrefixLength!.Value, ct), []).ConfigureAwait(false));
                 var inNetwork = FromArp(arp).ToList();
                 inNetwork.AddRange(DevicesIn(devices, term).Where(d => inNetwork.All(c => !c.Addresses.Contains(d.Ip!))).Select(d => new Candidate([d.Ip!], [], [], d)));
                 return inNetwork.OrderBy(c => AddressKey(c.Addresses.FirstOrDefault())).ToList();
@@ -200,7 +209,7 @@ public sealed class NetworkSearch
 
             case SearchTermKind.MacAddress:
             {
-                var arp = await run.Ask(SearchSource.Arp, ct => _arp.FindByMacAsync(term.Mac!, ct), []).ConfigureAwait(false);
+                var arp = Clean(await run.Ask(SearchSource.Arp, ct => _arp.FindByMacAsync(term.Mac!, ct), []).ConfigureAwait(false));
                 var addresses = arp.Select(a => a.Ipv4Address).OfType<string>().Distinct().ToList();
                 return [new Candidate(addresses, [term.Mac!], arp.ToList(), null)];
             }
@@ -242,15 +251,19 @@ public sealed class NetworkSearch
         var addresses = candidate.Addresses.ToList();
         var arp = candidate.Arp.ToList();
 
+        // Found by name or management address alone: ask ARP for it, so the
+        // record is the same however the endpoint was found.
+        if (arp.Count == 0 && candidate.Macs.Count == 0 && addresses.Count > 0
+            && IPAddress.TryParse(addresses[0], out var first) && first.AddressFamily == AddressFamily.InterNetwork)
+        {
+            arp.AddRange(Clean(await run.Ask(SearchSource.Arp, ct => _arp.FindByAddressAsync(first, ct), []).ConfigureAwait(false)));
+        }
+
         // A MAC search already knows its addresses; an address search asks ARP
         // again for each MAC's other addresses, as upstream's single-host view does.
-        var macs = candidate.Macs.Concat(arp.Select(a => a.MacAddress).OfType<string>())
-            .Select(MacAddresses.Normalise).OfType<string>().Where(m => !MacAddresses.IsNotAHost(m)).Distinct().ToList();
+        var known = candidate.Macs.Concat(arp.Select(a => a.MacAddress).OfType<string>()).Distinct().ToList();
+        var macs = known.Where(m => !MacAddresses.IsNotAHost(m)).ToList();
         var lookedUp = macs.Take(_options.MaxMacsPerEndpoint).ToList();
-        if (macs.Count > lookedUp.Count)
-        {
-            run.Note(SearchSource.ForwardingTable, $"Only {lookedUp.Count} of {macs.Count} MACs were looked up.", lookedUp.Count, macs.Count);
-        }
 
         var perMac = await Task.WhenAll(lookedUp.Select(async mac =>
         {
@@ -260,7 +273,7 @@ public sealed class NetworkSearch
             var others = candidate.Macs.Contains(mac) ? Task.FromResult<IReadOnlyList<ArpEntry>>([])
                 : run.Ask(SearchSource.Arp, ct => _arp.FindByMacAsync(mac, ct), []);
             await Task.WhenAll(fdb, ports, vendor, others).ConfigureAwait(false);
-            return (Mac: mac, Fdb: fdb.Result, Ports: ports.Result, Vendor: vendor.Result, Others: others.Result);
+            return (Mac: mac, Fdb: fdb.Result, Ports: ports.Result, Vendor: vendor.Result, Others: Clean(others.Result));
         })).ConfigureAwait(false);
 
         foreach (var entry in perMac.SelectMany(m => m.Others))
@@ -272,7 +285,7 @@ public sealed class NetworkSearch
         }
 
         // Only when one MAC answers for the address are its other addresses this host's.
-        if (arp.Select(a => a.MacAddress).Distinct().Count() <= 1)
+        if (arp.Select(a => a.MacAddress).OfType<string>().Distinct().Count() <= 1)
         {
             addresses.AddRange(arp.Select(a => a.Ipv4Address).OfType<string>().Where(a => !addresses.Contains(a)));
         }
@@ -289,7 +302,14 @@ public sealed class NetworkSearch
         }
         else
         {
-            run.NotQueried(SearchSource.ForwardingTable, "No MAC address is known for this address.");
+            run.NotQueried(SearchSource.ForwardingTable, known.Count > 0
+                ? "Its MAC is broadcast or multicast, which no single host owns."
+                : "No MAC address is known for this endpoint.");
+        }
+
+        if (macs.Count > lookedUp.Count)
+        {
+            run.Note(SearchSource.ForwardingTable, $"Only {lookedUp.Count} of {macs.Count} MACs were looked up.", lookedUp.Count, macs.Count);
         }
 
         var resolver = FdbVlanResolver.Empty;
@@ -403,7 +423,7 @@ public sealed class NetworkSearch
             return (null, [], null);
         }
 
-        var networks = await run.Ask(SearchSource.Networks, ct => _networks.ListAsync(address.AddressFamily, ct), []).ConfigureAwait(false);
+        var networks = await run.Once($"networks:{address.AddressFamily}", () => run.Ask(SearchSource.Networks, ct => _networks.ListAsync(address.AddressFamily, ct), [])).ConfigureAwait(false);
         var best = networks
             .Select(n => NetworkSearchQuery.TryParseNetwork(n.Cidr, out var b, out var p) ? (Row: n, Base: b, Prefix: p) : default)
             .Where(n => n.Row is not null && NetworkSearchQuery.Contains(n.Base, n.Prefix, address))
@@ -414,7 +434,7 @@ public sealed class NetworkSearch
             return (null, [], null);
         }
 
-        var members = await run.Ask(SearchSource.Networks, ct => _networks.ListAddressesAsync(best.Row.Id, ct), []).ConfigureAwait(false);
+        var members = await run.Once($"network:{best.Row.Id}", () => run.Ask(SearchSource.Networks, ct => _networks.ListAddressesAsync(best.Row.Id, ct), [])).ConfigureAwait(false);
         var interfaces = members
             .Where(m => m.Address is not null)
             .Select(m => new SubnetInterface(m.Address!, m.PrefixLength, m.PortId, null, null))
@@ -429,6 +449,27 @@ public sealed class NetworkSearch
         var subnet = await SubnetAsync(run, [Compressed(address)]).ConfigureAwait(false);
         return subnet.Monitored is not null;
     }
+
+    private static T NotNull<T>(T? value, [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(value))] string? name = null)
+        where T : class
+        => value ?? throw new ArgumentNullException(name);
+
+    /// <summary>
+    /// ARP rows with their MACs in the one stored form, so the same MAC in two
+    /// spellings can't count as two (and raise a false conflict). Rows with no
+    /// readable MAC are dropped: they say nothing about who holds the address.
+    /// </summary>
+    private static IReadOnlyList<ArpEntry> Clean(IReadOnlyList<ArpEntry> arp)
+        => arp.Select(a => MacAddresses.Normalise(a.MacAddress) is { } mac
+                ? new ArpEntry { Id = a.Id, PortId = a.PortId, DeviceId = a.DeviceId, MacAddress = mac, Ipv4Address = a.Ipv4Address }
+                : null)
+            .OfType<ArpEntry>()
+            .ToList();
+
+    /// <summary>Whether a looked-up endpoint was seen anywhere at all.</summary>
+    private static bool HasEvidence(EndpointRecord record)
+        => record.Neighbours.Count > 0 || record.Locations.Count > 0 || record.IsMonitored || record.Subnet is not null
+           || record.Macs.Any(m => m.Vendor is not null);
 
     private static IEnumerable<Candidate> FromArp(IEnumerable<ArpEntry> arp)
         => arp.Where(a => !string.IsNullOrWhiteSpace(a.Ipv4Address))
@@ -519,6 +560,7 @@ public sealed class NetworkSearch
         private readonly CancellationToken _cancellationToken;
         private readonly SemaphoreSlim _gate;
         private readonly ConcurrentDictionary<SearchSource, SourceCoverage> _coverage = new();
+        private readonly ConcurrentDictionary<string, Lazy<Task<object>>> _once = new();
 
         public Run(NetworkSearchOptions options, CancellationToken cancellationToken)
         {
@@ -547,7 +589,7 @@ public sealed class NetworkSearch
                 Record(source, IsEmpty(result) ? SourceState.NoEntry : SourceState.Found);
                 return result;
             }
-            catch (LibreNmsApiException ex) when (ex.IsPermissionDenied)
+            catch (LibreNmsApiException ex) when (ex.IsPermissionDenied && !ex.IsAuthenticationFailure)
             {
                 Record(source, SourceState.PermissionDenied, "This account may not read it.");
                 return fallback;
@@ -557,7 +599,7 @@ public sealed class NetworkSearch
                 Record(source, SourceState.Unavailable, "This LibreNMS server doesn't offer it.");
                 return fallback;
             }
-            catch (LibreNmsApiException ex)
+            catch (LibreNmsApiException ex) when (!ex.IsAuthenticationFailure)
             {
                 Record(source, SourceState.Failed, ex.Message);
                 return fallback;
@@ -576,7 +618,7 @@ public sealed class NetworkSearch
             {
                 return await call(_cancellationToken).ConfigureAwait(false);
             }
-            catch (LibreNmsApiException)
+            catch (LibreNmsApiException ex) when (!ex.IsAuthenticationFailure)
             {
                 return default;
             }
@@ -594,11 +636,19 @@ public sealed class NetworkSearch
 
         public void Unavailable(SearchSource source, string detail) => Record(source, SourceState.Unavailable, detail);
 
-        /// <summary>Adds a note (and a truncation count) to what a source said, without changing its state.</summary>
+        /// <summary>
+        /// Adds a note (and a truncation count) to what a source said, without
+        /// changing its state - call it after the source has been asked. A
+        /// source that wasn't asked stays <see cref="SourceState.NotQueried"/>.
+        /// </summary>
         public void Note(SearchSource source, string detail, int? shown = null, int? total = null)
             => _coverage.AddOrUpdate(source,
-                _ => new SourceCoverage(source, SourceState.Found, detail, shown, total),
+                _ => new SourceCoverage(source, SourceState.NotQueried, detail, shown, total),
                 (_, existing) => existing with { Detail = detail, Shown = shown ?? existing.Shown, Total = total ?? existing.Total });
+
+        /// <summary>Runs <paramref name="call"/> once per <paramref name="key"/> in this search - the network list a pasted list would otherwise fetch per term.</summary>
+        public async Task<T> Once<T>(string key, Func<Task<T>> call)
+            => (T)await _once.GetOrAdd(key, _ => new Lazy<Task<object>>(async () => (await call().ConfigureAwait(false))!)).Value.ConfigureAwait(false);
 
         public IReadOnlyList<SourceCoverage> Coverage() => _coverage.Values.OrderBy(c => c.Source).ToList();
 
@@ -609,7 +659,7 @@ public sealed class NetworkSearch
         private void Record(SearchSource source, SourceState state, string? detail = null)
             => _coverage.AddOrUpdate(source,
                 _ => new SourceCoverage(source, state, detail),
-                (_, existing) => Rank(state) > Rank(existing.State) ? existing with { State = state, Detail = detail ?? existing.Detail } : existing);
+                (_, existing) => Rank(state) > Rank(existing.State) ? existing with { State = state, Detail = detail } : existing);
 
         private static int Rank(SourceState state) => state switch
         {

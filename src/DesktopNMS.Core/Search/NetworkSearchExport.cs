@@ -7,13 +7,14 @@ namespace DesktopNMS.Core.Search;
 /// <summary>
 /// Network Search results as CSV (#91), like upstream's host export, so every
 /// app writes the same file: one row per switch port an endpoint is learned
-/// on, or one row for an endpoint with none.
+/// on, plus a row for each MAC no port has learned. Times are LibreNMS's own,
+/// in the server's time zone, as its API reports them.
 /// </summary>
 public static class NetworkSearchExport
 {
     private static readonly string[] Header =
     [
-        "Address", "MAC", "Vendor", "Names", "Switch", "Port", "VLAN", "Connection", "Last seen (UTC)", "Neighbour of",
+        "Address", "MAC", "Vendor", "Names", "Switch", "Port", "VLAN", "Connection", "Last seen (server time)", "Neighbour of",
     ];
 
     public static string ToCsv(IEnumerable<EndpointRecord> endpoints, MacAddressFormat macFormat = MacAddressFormat.Colon)
@@ -31,11 +32,16 @@ public static class NetworkSearchExport
                 Names = string.Join("; ", endpoint.Names),
             };
 
-            if (endpoint.Locations.Count == 0)
+            // Every MAC gets a row: one per port it was learned on, or one on its own.
+            var unplaced = endpoint.Macs.Where(m => endpoint.Locations.All(l => l.Mac != m.Hex)).ToList();
+            if (endpoint.Locations.Count == 0 && unplaced.Count == 0)
             {
-                var mac = endpoint.Macs.FirstOrDefault();
-                Line(csv, [common.Address, Mac(mac?.Hex, macFormat), mac?.Vendor, common.Names, null, null, null, null, Time(mac?.LastSeen), neighbours]);
-                continue;
+                Line(csv, [common.Address, null, null, common.Names, null, null, null, null, null, neighbours]);
+            }
+
+            foreach (var mac in unplaced)
+            {
+                Line(csv, [common.Address, Mac(mac.Hex, macFormat), mac.Vendor, common.Names, null, null, null, null, Time(mac.LastSeen), neighbours]);
             }
 
             foreach (var location in endpoint.Locations)
@@ -59,7 +65,8 @@ public static class NetworkSearchExport
     {
         LocationKind.Direct => "Direct",
         LocationKind.Shared => "Shared port",
-        _ => "Uplink",
+        LocationKind.Uplink => "Uplink",
+        _ => "Access port",
     };
 
     private static string DeviceName(Device? device, int deviceId)
