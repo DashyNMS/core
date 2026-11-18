@@ -286,6 +286,57 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Network_search_settings_survive_save_reload_and_clone()
+    {
+        var store = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile);
+        store.Current.NetworkSearchMacFormat = "Dotted";
+        store.Current.RememberNetworkSearch("192.0.2.117");
+        store.Current.RememberNetworkSearch("00:00:5e:00:53:68");
+
+        store.Save();
+
+        var reloaded = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile).Current;
+        Assert.Equal(Search.MacAddressFormat.Dotted, reloaded.NetworkSearchMacFormatValue);
+        Assert.Equal(["00:00:5e:00:53:68", "192.0.2.117"], reloaded.NetworkSearchRecent);
+        var clone = reloaded.Clone();
+        Assert.Equal(["00:00:5e:00:53:68", "192.0.2.117"], clone.NetworkSearchRecent);
+        clone.RememberNetworkSearch("192.0.2.1");
+        Assert.Equal(2, reloaded.NetworkSearchRecent.Count);
+    }
+
+    [Fact]
+    public void Recent_network_searches_move_a_repeat_to_the_front_and_stop_at_the_limit()
+    {
+        var settings = new AppSettings();
+        for (var i = 1; i <= 12; i++)
+        {
+            settings.RememberNetworkSearch($"192.0.2.{i}");
+        }
+
+        settings.RememberNetworkSearch(" 192.0.2.5 ");
+        settings.RememberNetworkSearch("   ");
+
+        Assert.Equal(AppSettings.MaxNetworkSearchRecent, settings.NetworkSearchRecent.Count);
+        Assert.Equal("192.0.2.5", settings.NetworkSearchRecent[0]);
+        Assert.Single(settings.NetworkSearchRecent, q => q == "192.0.2.5");
+    }
+
+    [Theory]
+    [InlineData("\"Morse\"")]
+    [InlineData("\"dotted\"")]
+    [InlineData("null")]
+    public void An_unknown_mac_format_in_the_file_reads_as_colons(string json)
+    {
+        File.WriteAllText(SettingsFile, "{ \"networkSearchMacFormat\": " + json + ", \"networkSearchRecent\": null }");
+
+        var current = new SettingsStore(NullLogger<SettingsStore>.Instance, SettingsFile).Current;
+
+        Assert.Equal(Search.MacAddressFormat.Colon, current.NetworkSearchMacFormatValue);
+        Assert.Equal("Colon", current.NetworkSearchMacFormat);
+        Assert.Empty(current.NetworkSearchRecent);
+    }
+
+    [Fact]
     public void A_new_settings_object_shows_ports_as_a_table()
     {
         Assert.Equal(AppSettings.PortsLayoutTable, new AppSettings().PortsLayout);
