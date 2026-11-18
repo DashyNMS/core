@@ -24,6 +24,7 @@ public sealed class LibreNmsResourceApis
         Health = new DeviceHealthApi(transport);
         Fdb = new FdbApi(transport);
         Arp = new ArpApi(transport);
+        Networks = new IpNetworksApi(transport);
         Vlans = new VlansApi(transport);
         DeviceGroups = new DeviceGroupsApi(transport);
         Locations = new LocationsApi(transport);
@@ -53,6 +54,8 @@ public sealed class LibreNmsResourceApis
     public IFdbApi Fdb { get; }
 
     public IArpApi Arp { get; }
+
+    public IIpNetworksApi Networks { get; }
 
     public IVlansApi Vlans { get; }
 

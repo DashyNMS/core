@@ -481,6 +481,24 @@ internal sealed class PortsApi : IPortsApi
         var url = "devices/" + deviceId.ToString(CultureInfo.InvariantCulture) + "/ip";
         return _transport.GetCollectionAsync<DeviceIpAddress>(url, "addresses", cancellationToken);
     }
+
+    public async Task<Port?> GetAsync(int portId, CancellationToken cancellationToken = default)
+    {
+        var url = "ports/" + portId.ToString(CultureInfo.InvariantCulture);
+        return (await _transport.GetCollectionAsync<Port>(url, "port", cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+    }
+
+    public async Task<IReadOnlyList<Port>> FindByLearnedMacAsync(string mac, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _transport.GetCollectionAsync<Port>("ports/mac/" + FdbApi.RequireMac(mac), "ports", cancellationToken).ConfigureAwait(false);
+        }
+        catch (LibreNmsApiException ex) when (FdbApi.IsNoResults(ex))
+        {
+            return Array.Empty<Port>();
+        }
+    }
 }
 
 /// <summary>Implementation of <see cref="IFdbApi"/>.</summary>
@@ -494,6 +512,83 @@ internal sealed class FdbApi : IFdbApi
     {
         var url = "devices/" + deviceId.ToString(CultureInfo.InvariantCulture) + "/fdb";
         return _transport.GetCollectionAsync<FdbEntry>(url, "ports_fdb", cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<FdbEntry>> FindByMacAsync(string mac, CancellationToken cancellationToken = default)
+    {
+        // The route compares the stored form exactly: twelve lowercase digits.
+        var url = "resources/fdb/" + RequireMac(mac);
+        try
+        {
+            return await _transport.GetCollectionAsync<FdbEntry>(url, "ports_fdb", cancellationToken).ConfigureAwait(false);
+        }
+        catch (LibreNmsApiException ex) when (IsNoResults(ex))
+        {
+            return Array.Empty<FdbEntry>();
+        }
+    }
+
+    public async Task<string?> FindVendorAsync(string mac, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var document = await _transport.SendAsync(HttpMethod.Get, "resources/fdb/" + RequireMac(mac) + "/detail", cancellationToken: cancellationToken).ConfigureAwait(false);
+            return document.RootElement.TryGetProperty("mac_oui", out var vendor) && vendor.ValueKind == System.Text.Json.JsonValueKind.String
+                   && !string.IsNullOrWhiteSpace(vendor.GetString())
+                ? vendor.GetString()!.Trim()
+                : null;
+        }
+        catch (LibreNmsApiException ex) when (IsNoResults(ex))
+        {
+            return null;
+        }
+    }
+
+    internal static string RequireMac(string mac)
+        => DesktopNMS.Core.Search.MacAddresses.Normalise(mac) ?? throw new ArgumentException("Not a MAC address.", nameof(mac));
+
+    /// <summary>
+    /// A 404 that means "nothing matched" - LibreNMS's search endpoints answer
+    /// an empty result that way - as opposed to a route the server doesn't
+    /// have, which an older LibreNMS answers with "This API route doesn't exist."
+    /// </summary>
+    internal static bool IsNoResults(LibreNmsApiException ex)
+        => ex.StatusCode == System.Net.HttpStatusCode.NotFound
+           && !string.IsNullOrWhiteSpace(ex.ServerMessage)
+           && !ex.ServerMessage.Contains("route doesn't exist", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>Implementation of <see cref="IIpNetworksApi"/>.</summary>
+internal sealed class IpNetworksApi : IIpNetworksApi
+{
+    private readonly ILibreNmsTransport _transport;
+
+    public IpNetworksApi(ILibreNmsTransport transport) => _transport = transport;
+
+    public async Task<IReadOnlyList<IpNetwork>> ListAsync(System.Net.Sockets.AddressFamily family, CancellationToken cancellationToken = default)
+    {
+        var url = "resources/ip/networks/" + (family == System.Net.Sockets.AddressFamily.InterNetworkV6 ? "ipv6" : "ipv4");
+        try
+        {
+            return await _transport.GetCollectionAsync<IpNetwork>(url, "ip_networks", cancellationToken).ConfigureAwait(false);
+        }
+        catch (LibreNmsApiException ex) when (FdbApi.IsNoResults(ex))
+        {
+            return Array.Empty<IpNetwork>();
+        }
+    }
+
+    public async Task<IReadOnlyList<IpNetworkAddress>> ListAddressesAsync(int networkId, CancellationToken cancellationToken = default)
+    {
+        var url = "resources/ip/networks/" + networkId.ToString(CultureInfo.InvariantCulture) + "/ip";
+        try
+        {
+            return await _transport.GetCollectionAsync<IpNetworkAddress>(url, "addresses", cancellationToken).ConfigureAwait(false);
+        }
+        catch (LibreNmsApiException ex) when (FdbApi.IsNoResults(ex))
+        {
+            return Array.Empty<IpNetworkAddress>();
+        }
     }
 }
 
@@ -527,6 +622,31 @@ internal sealed class ArpApi : IArpApi
 
         var colons = string.Join(":", Enumerable.Range(0, 6).Select(i => hex.Substring(i * 2, 2)));
         return _transport.GetCollectionAsync<ArpEntry>("resources/ip/arp/" + colons, "arp", cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ArpEntry>> FindByAddressAsync(System.Net.IPAddress address, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        RequireIpv4(address);
+        return _transport.GetCollectionAsync<ArpEntry>("resources/ip/arp/" + address, "arp", cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ArpEntry>> FindInNetworkAsync(System.Net.IPAddress network, int prefixLength, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(network);
+        RequireIpv4(network);
+        ArgumentOutOfRangeException.ThrowIfNegative(prefixLength);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(prefixLength, 32);
+        return _transport.GetCollectionAsync<ArpEntry>(
+            "resources/ip/arp/" + network + "/" + prefixLength.ToString(CultureInfo.InvariantCulture), "arp", cancellationToken);
+    }
+
+    private static void RequireIpv4(System.Net.IPAddress address)
+    {
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+        {
+            throw new ArgumentException("ARP is IPv4 only.", nameof(address));
+        }
     }
 }
 
