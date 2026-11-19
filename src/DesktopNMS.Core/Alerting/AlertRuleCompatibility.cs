@@ -267,9 +267,21 @@ public static class AlertRuleCompatibility
             var text = Regex.Replace(sql.Replace("`", string.Empty, StringComparison.Ordinal), @"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", "''");
             // Each query block resolves its own bare columns: a subquery's
             // tables don't make the outer query's columns ambiguous.
-            foreach (var block in QueryBlocks(text))
+            var blocks = QueryBlocks(text);
+            var scopes = blocks.Select(b => NamedTables(b.Text)).ToList();
+            for (var i = 0; i < blocks.Count; i++)
             {
-                var (named, scrubbed) = NamedTables(block);
+                var block = blocks[i].Text;
+                var scrubbed = scopes[i].Scrubbed;
+
+                // This block's tables, then each enclosing block's: a correlated
+                // subquery's bare column resolves outwards when no inner table has it.
+                var chain = new List<IReadOnlySet<string>>();
+                for (var at = i; at >= 0; at = blocks[at].Parent)
+                {
+                    chain.Add(scopes[at].Tables);
+                }
+
                 foreach (var removed in RemovedFields)
                 {
                     var qualified = $@"(?<![\w.]){Regex.Escape(removed.Table)}\.{Regex.Escape(removed.Column)}(?!\w)";
@@ -279,7 +291,7 @@ public static class AlertRuleCompatibility
                     // "FROM devices AS timeout WHERE timeout > 5" still counts.
                     var bare = $@"(?<![\w.]){Regex.Escape(removed.Column)}(?![\w.])";
                     if (Regex.IsMatch(block, qualified, RegexOptions.IgnoreCase, RegexTimeout)
-                        || (BareMeansOnly(removed, named) && Regex.IsMatch(scrubbed, bare, RegexOptions.IgnoreCase, RegexTimeout)))
+                        || (BareMeansOnly(removed, chain) && Regex.IsMatch(scrubbed, bare, RegexOptions.IgnoreCase, RegexTimeout)))
                     {
                         found.Add(removed);
                     }
@@ -300,16 +312,23 @@ public static class AlertRuleCompatibility
         new($"proxmox.{column}", LibreNmsVersion.PollingMethods, null, ProxmoxAdvice);
 
     /// <summary>Whether an unqualified mention of the column can only be <paramref name="removed"/>.</summary>
-    private static bool BareMeansOnly(RemovedConditionField removed, IReadOnlySet<string> named)
+    /// <param name="scopes">The block's own tables first, then each enclosing block's, as SQL resolves names.</param>
+    private static bool BareMeansOnly(RemovedConditionField removed, IReadOnlyList<IReadOnlySet<string>> scopes)
     {
         var owners = TablesByColumn.TryGetValue(removed.Column, out var tables) ? tables : [removed.Table];
-        if (named.Count == 0)
+        foreach (var named in scopes)
         {
-            return owners.All(t => t.Equals(removed.Table, StringComparison.OrdinalIgnoreCase));
+            // The nearest scope with a table that has the column decides.
+            if (owners.Any(named.Contains))
+            {
+                return named.Contains(removed.Table)
+                       && owners.All(t => t.Equals(removed.Table, StringComparison.OrdinalIgnoreCase) || !named.Contains(t));
+            }
         }
 
-        return named.Contains(removed.Table)
-               && owners.All(t => t.Equals(removed.Table, StringComparison.OrdinalIgnoreCase) || !named.Contains(t));
+        // No scope names an owner: a bare condition with no FROM at all counts
+        // only when no other table has the column.
+        return scopes.All(s => s.Count == 0) && owners.All(t => t.Equals(removed.Table, StringComparison.OrdinalIgnoreCase));
     }
 
     private static readonly char[] SqlWhitespace = [' ', '\t', '\r', '\n'];
@@ -318,11 +337,13 @@ public static class AlertRuleCompatibility
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// A query and each of its subqueries as separate blocks, innermost first,
-    /// each with its nested subqueries replaced by a placeholder.
+    /// A query and each of its subqueries as separate blocks, outermost first,
+    /// each with its nested subqueries replaced by a placeholder and knowing
+    /// which block encloses it (-1 for the query itself).
     /// </summary>
-    private static IEnumerable<string> QueryBlocks(string sql)
+    private static List<(string Text, int Parent)> QueryBlocks(string sql)
     {
+        var inner = new List<string>();
         var text = sql;
         while (true)
         {
@@ -335,8 +356,7 @@ public static class AlertRuleCompatibility
 
             if (start < 0)
             {
-                yield return text;
-                yield break;
+                break;
             }
 
             var depth = 0;
@@ -351,9 +371,19 @@ public static class AlertRuleCompatibility
             }
 
             end = Math.Min(end, text.Length - 1);
-            yield return text[(start + 1)..end];
-            text = text[..start] + " (subquery) " + text[(end + 1)..];
+            inner.Add(text[(start + 1)..end]);
+            text = text[..start] + $" (subquery{(inner.Count - 1).ToString(CultureInfo.InvariantCulture)}) " + text[(end + 1)..];
         }
+
+        // Outermost first; a block's parent is the one holding its placeholder.
+        var all = new List<string> { text };
+        all.AddRange(Enumerable.Reverse(inner));
+        return all.Select((block, at) =>
+        {
+            var token = at == 0 ? null : $"(subquery{(all.Count - 1 - at).ToString(CultureInfo.InvariantCulture)})";
+            var parent = token is null ? -1 : all.FindIndex(b => b.Contains(token, StringComparison.Ordinal));
+            return (block, parent);
+        }).ToList();
     }
 
     /// <summary>
