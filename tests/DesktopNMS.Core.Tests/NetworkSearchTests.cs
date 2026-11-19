@@ -126,6 +126,8 @@ public class NetworkSearchTests
         Assert.Equal(5, first.Remaining);
         Assert.Equal(["192.0.2.11", "192.0.2.14"], second.Endpoints.Select(e => e.Title));
         Assert.All(first.Endpoints, e => Assert.False(e.IsDetailed));
+        var all = await Search(Network(), new NetworkSearchOptions { PageSize = 50 }).SearchAsync("192.0.2.0/24");
+        Assert.True(all.Endpoints.Single(e => e.Title == "192.0.2.254").IsMonitored); // a router interface, known only from its network
         Assert.Equal(SourceState.NotQueried, first.CoverageOf(SearchSource.ForwardingTable)!.State);
     }
 
@@ -188,9 +190,13 @@ public class NetworkSearchTests
         Assert.Equal(SourceState.PermissionDenied, result.CoverageOf(SearchSource.ForwardingTable)!.State);
         Assert.Single(result.Endpoints[0].Neighbours);
 
-        // The ports that learned it still show, with their VLANs unknown.
+        // The ports that learned it still show, with their VLANs unknown,
+        // uplinks still marked and no false conflict between them.
         Assert.Equal([1019, 2037, 4001], result.Endpoints[0].Locations.Select(l => l.PortId).Order());
         Assert.All(result.Endpoints[0].Locations, l => Assert.Null(l.VlanNumber));
+        Assert.True(result.Endpoints[0].Locations.Single(l => l.PortId == 2037).IsUplink);
+        Assert.Equal(1019, result.Endpoints[0].BestLocation!.PortId);
+        Assert.Empty(result.Endpoints[0].Conflicts);
     }
 
     [Fact]

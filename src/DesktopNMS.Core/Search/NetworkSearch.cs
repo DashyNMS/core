@@ -255,6 +255,7 @@ public sealed class NetworkSearch
             Macs = macs.Select(m => new EndpointMac(m, null, null, false)).ToList(),
             Names = Names(device),
             MonitoredDevice = device,
+            MonitoredInterfacePortId = candidate.InterfacePortId,
             Locations = [],
             Neighbours = neighbours,
             Conflicts = AddressConflicts(neighbours),
@@ -342,7 +343,7 @@ public sealed class NetworkSearch
             resolver = new FdbVlanResolver(vlans ?? []);
         }
 
-        var links = fdbEntries.Count == 0 ? []
+        var links = fdbEntries.Count == 0 && portsById.Count == 0 ? []
             : await run.Ask(SearchSource.Links, ct => _links.ListAllAsync(ct), []).ConfigureAwait(false);
         var linked = links.Select(l => l.LocalPortId).ToHashSet();
 
@@ -550,7 +551,7 @@ public sealed class NetworkSearch
                 && NetworkSearchQuery.Contains(term.Address, term.PrefixLength!.Value, ip)
                 && found.All(c => !c.Addresses.Any(a => SameAddress(a, ip))))
             {
-                found.Add(new Candidate([Compressed(ip)], [], [], run.DeviceAt(Compressed(ip))));
+                found.Add(new Candidate([Compressed(ip)], [], [], run.DeviceAt(Compressed(ip))) { InterfacePortId = member.PortId });
             }
         }
     }
@@ -580,7 +581,7 @@ public sealed class NetworkSearch
                         m.Addresses.Union(joined.Addresses).ToList(),
                         m.Macs.Union(joined.Macs).ToList(),
                         m.Arp.Concat(joined.Arp).DistinctBy(a => a.Id).ToList(),
-                        m.Device ?? joined.Device);
+                        m.Device ?? joined.Device) { InterfacePortId = m.InterfacePortId ?? joined.InterfacePortId };
                     merged.RemoveAt(i);
                 }
             }
@@ -649,7 +650,11 @@ public sealed class NetworkSearch
             : "9" + text;
 
     /// <summary>What a term found before the full lookup.</summary>
-    private sealed record Candidate(IReadOnlyList<string> Addresses, IReadOnlyList<string> Macs, IReadOnlyList<ArpEntry> Arp, Device? Device);
+    private sealed record Candidate(IReadOnlyList<string> Addresses, IReadOnlyList<string> Macs, IReadOnlyList<ArpEntry> Arp, Device? Device)
+    {
+        /// <summary>The monitored interface a network search found this address on, so a list row still knows it's monitored.</summary>
+        public int? InterfacePortId { get; init; }
+    }
 
     /// <summary>One search's requests and coverage.</summary>
     private sealed class Run
