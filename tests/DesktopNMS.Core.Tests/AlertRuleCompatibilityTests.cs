@@ -114,6 +114,8 @@ public class AlertRuleCompatibilityTests
     [InlineData("SELECT vlan_id FROM ports_fdb;", "ports_fdb.vlan_id")] // a terminated statement
     [InlineData("SELECT vlan_id FROM ports_fdb WHERE EXISTS (SELECT 1 FROM vlans)", "ports_fdb.vlan_id")] // a subquery's tables are its own
     [InlineData("SELECT * FROM ports_fdb WHERE EXISTS (SELECT 1 FROM devices WHERE vlan_id = 12)", "ports_fdb.vlan_id")] // a correlated column resolves outwards
+    [InlineData("SELECT * FROM ports_fdb WHERE EXISTS (SELECT COALESCE(0, (SELECT 1)) FROM devices WHERE vlan_id = 12)", "ports_fdb.vlan_id")] // a scalar subquery isn't a derived table
+    [InlineData("SELECT vlan_id FROM ports_fdb WHERE devices.status = 1", "ports_fdb.vlan_id")] // selecting the column itself still counts
     [InlineData("SELECT * FROM devices AS timeout WHERE timeout > 5", "devices.timeout")] // an alias doesn't hide a real column
     [InlineData("SELECT vlan_id FROM ports_fdb\nAS f WHERE vlan_id = 12", "ports_fdb.vlan_id")] // a newline before the alias
     [InlineData("SELECT vlan_id FROM\tports_fdb WHERE vlan_id = 12", "ports_fdb.vlan_id")]
@@ -127,6 +129,8 @@ public class AlertRuleCompatibilityTests
     [InlineData("SELECT * FROM devices,ports_fdb,vlans WHERE vlan_id = 12")] // bare and ambiguous
     [InlineData("SELECT * FROM ports_fdb WHERE EXISTS (SELECT 1 FROM vlans WHERE vlan_id = 12)")] // the inner vlans owns it
     [InlineData("SELECT ports_fdb.vlan AS vlan_id FROM ports_fdb")] // a result alias, not the column
+    [InlineData("SELECT ports_fdb.vlan vlan_id FROM ports_fdb")] // the same alias without AS
+    [InlineData("SELECT COUNT(ports_fdb.vlan) vlan_id, ports_fdb.mac_address FROM ports_fdb")]
     [InlineData("SELECT * FROM ports_fdb WHERE EXISTS (SELECT 1 FROM (SELECT 1 AS x) d WHERE vlan_id = 12)")] // a derived table's columns are unknown
     [InlineData("SELECT * FROM devices,vminfo WHERE vminfo.id = 4")] // another table's id
     [InlineData("SELECT * FROM devices,ports WHERE id = 4 AND ports.port_id = 1")] // a bare id with no proxmox table

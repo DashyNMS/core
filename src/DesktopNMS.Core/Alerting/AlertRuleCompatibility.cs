@@ -349,7 +349,54 @@ public static class AlertRuleCompatibility
     /// <summary>Stands for a derived table's unknown columns in a scope chain.</summary>
     private static readonly IReadOnlySet<string> Opaque = new HashSet<string>();
 
-    private static Regex DerivedTable() => new(@"(?:\bfrom|\bjoin|,)\s*\(subquery\d+\)", RegexOptions.IgnoreCase, RegexTimeout);
+    /// <summary>A subquery as a relation: straight after FROM or JOIN, or later in FROM's comma list - not a scalar subquery in a function's arguments.</summary>
+    private static Regex DerivedTable() => new(@"\b(?:from\s+(?:\w+(?:\s+(?:as\s+)?\w+)?\s*,\s*)*|join\s+)\(subquery\d+\)", RegexOptions.IgnoreCase, RegexTimeout);
+
+    private static readonly HashSet<string> SqlWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "select", "distinct", "from", "where", "and", "or", "not", "as", "is", "null", "in", "like", "between", "case", "when", "then", "else", "end", "asc", "desc",
+    };
+
+    /// <summary>
+    /// The select list without its aliases - "ports_fdb.vlan vlan_id" as well
+    /// as "ports_fdb.vlan AS vlan_id" - so a result name is never read as a column.
+    /// </summary>
+    private static string WithoutSelectAliases(string block)
+    {
+        var select = Regex.Match(block, @"^\s*select\s+(?<list>.*?)\s+from\b", RegexOptions.IgnoreCase | RegexOptions.Singleline, RegexTimeout);
+        if (!select.Success)
+        {
+            return block;
+        }
+
+        // Split on the list's own commas, not those inside function calls.
+        var list = select.Groups["list"];
+        var items = new List<string>();
+        var depth = 0;
+        var start = 0;
+        for (var i = 0; i < list.Value.Length; i++)
+        {
+            depth += list.Value[i] switch { '(' => 1, ')' => -1, _ => 0 };
+            if (list.Value[i] == ',' && depth == 0)
+            {
+                items.Add(list.Value[start..i]);
+                start = i + 1;
+            }
+        }
+
+        items.Add(list.Value[start..]);
+        var cleaned = items.Select(item =>
+        {
+            var alias = Regex.Match(item, @"^(?<expr>.*[\w)*])\s+(?<alias>[A-Za-z_]\w*)\s*$", RegexOptions.Singleline, RegexTimeout);
+            return alias.Success && !SqlWords.Contains(alias.Groups["alias"].Value) && !SqlWords.Contains(LastWord(alias.Groups["expr"].Value))
+                ? alias.Groups["expr"].Value
+                : item;
+        });
+
+        return block[..list.Index] + string.Join(",", cleaned) + block[(list.Index + list.Length)..];
+    }
+
+    private static string LastWord(string text) => Regex.Match(text, @"(\w+)\s*$", RegexOptions.None, RegexTimeout).Groups[1].Value;
 
     /// <summary>Rule SQL is short; a pattern that runs this long is stuck, not working.</summary>
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
@@ -445,8 +492,8 @@ public static class AlertRuleCompatibility
             Add(join.Groups[1].Value);
         }
 
-        // A column alias ("SELECT vlan AS vlan_id") names a result, not a column.
-        scrubbed = Regex.Replace(scrubbed, @"\bas\s+\w+", " ", RegexOptions.IgnoreCase, RegexTimeout);
+        // A column alias ("SELECT vlan AS vlan_id", or "SELECT vlan vlan_id") names a result, not a column.
+        scrubbed = Regex.Replace(WithoutSelectAliases(scrubbed), @"\bas\s+\w+", " ", RegexOptions.IgnoreCase, RegexTimeout);
         return (tables, scrubbed);
     }
 
