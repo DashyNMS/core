@@ -116,6 +116,15 @@ public sealed class Port
     [JsonPropertyName("deleted")]
     public bool Deleted { get; set; }
 
+    /// <summary>
+    /// How many MAC addresses this port's forwarding table holds - only set
+    /// by /ports/mac/{mac} (<see cref="Api.IPortsApi.FindByLearnedMacAsync"/>).
+    /// One means the host plugs in here; many means a shared segment or a
+    /// link to another switch.
+    /// </summary>
+    [JsonPropertyName("fdb_entries_count")]
+    public int? FdbEntriesCount { get; set; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalData { get; set; }
 

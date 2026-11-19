@@ -1,0 +1,10 @@
+{
+    "status": "ok",
+    "vlans": [
+        { "vlan_id": 50, "device_id": 1, "vlan_vlan": 2074, "vlan_domain": 1, "vlan_name": "Cameras", "vlan_type": "ethernet", "vlan_state": 1 },
+        { "vlan_id": 51, "device_id": 1, "vlan_vlan": 2099, "vlan_domain": 1, "vlan_name": "Voice", "vlan_type": "ethernet", "vlan_state": 1 },
+        { "vlan_id": 52, "device_id": 1, "vlan_vlan": 1, "vlan_domain": 1, "vlan_name": "default", "vlan_type": "ethernet", "vlan_state": 1 },
+        { "vlan_id": 60, "device_id": 2, "vlan_vlan": 2074, "vlan_domain": 1, "vlan_name": "Cameras", "vlan_type": "ethernet", "vlan_state": 1 }
+    ],
+    "count": 4
+}

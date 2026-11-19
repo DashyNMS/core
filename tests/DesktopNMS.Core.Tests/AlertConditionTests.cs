@@ -169,11 +169,12 @@ public class AlertConditionTests
     {
         var fields = AlertConditionFields.Groups.SelectMany(g => g.Fields).ToList();
 
-        // LibreNMS's own QueryBuilderFilter resolves 115 device-related tables
-        // to 1,385 fields; the 116th group here is the macros. A regeneration
-        // that silently collapses is the failure this guards against.
-        Assert.Equal(116, AlertConditionFields.Groups.Count);
-        Assert.Equal(1385, fields.Count);
+        // Every device-related table LibreNMS 26.10 and 26.11 resolve, 117 of
+        // them, plus the macros group: 1,421 fields, removed ones kept so saved
+        // conditions still open (#87). A regeneration that silently collapses
+        // is the failure this guards against.
+        Assert.Equal(118, AlertConditionFields.Groups.Count);
+        Assert.Equal(1421, fields.Count);
         Assert.Equal(fields.Count, fields.Select(f => f.Field).Distinct().Count());
     }
 

@@ -1,0 +1,3 @@
+{ "status": "ok", "vlans": [
+  { "vlan_id": 50, "device_id": 1, "vlan_vlan": 2074, "vlan_domain": 1, "vlan_name": "Cameras", "vlan_type": "ethernet", "vlan_state": 1 },
+  { "vlan_id": 53, "device_id": 1, "vlan_vlan": 2069, "vlan_domain": 1, "vlan_name": "Displays", "vlan_type": "ethernet", "vlan_state": 1 } ], "count": 2 }

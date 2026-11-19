@@ -31,6 +31,7 @@ public interface ILibreNmsClient
     IFdbApi Fdb { get; }
 
     IArpApi Arp { get; }
+    IIpNetworksApi Networks { get; }
 
     IVlansApi Vlans { get; }
 

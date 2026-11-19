@@ -24,6 +24,20 @@ internal static class AlertConditionFieldCatalog
         access_points.type|s
         alert_device_map.id|s
         alert_device_map.rule_id|s
+        alert_faults.alerted|s
+        alert_faults.entity_id|s
+        alert_faults.entity_key|s
+        alert_faults.entity_type|s
+        alert_faults.first_seen|d
+        alert_faults.id|s
+        alert_faults.info|s
+        alert_faults.last_seen|d
+        alert_faults.note|s
+        alert_faults.open|s
+        alert_faults.rule_id|s
+        alert_faults.severity|s
+        alert_faults.state|s
+        alert_faults.timestamp|d
         alert_location_map.id|s
         alert_location_map.location_id|s
         alert_location_map.rule_id|s
@@ -258,6 +272,16 @@ internal static class AlertConditionFieldCatalog
         device_outages.going_down|s
         device_outages.id|s
         device_outages.up_again|s
+        device_polling_methods.affects_availability|s
+        device_polling_methods.created_at|d
+        device_polling_methods.enabled|s
+        device_polling_methods.id|s
+        device_polling_methods.last_check_changed_at|d
+        device_polling_methods.last_check_message|s
+        device_polling_methods.last_check_successful|s
+        device_polling_methods.method_type|s
+        device_polling_methods.secret_id|s
+        device_polling_methods.updated_at|d
         device_stats.created_at|d
         device_stats.id|s
         device_stats.ping_last_timestamp|d
@@ -526,6 +550,7 @@ internal static class AlertConditionFieldCatalog
         mempools.mempool_type|s
         mempools.mempool_used|s
         mempools.mempool_used_oid|s
+        mempools.polling_method|s
         mpls_lsp_paths.lsp_id|s
         mpls_lsp_paths.lsp_path_id|s
         mpls_lsp_paths.mplsLspPathAdminState|e|noop,inService,outOfService
@@ -959,6 +984,7 @@ internal static class AlertConditionFieldCatalog
         ports_fdb.port_id|s
         ports_fdb.ports_fdb_id|s
         ports_fdb.updated_at|d
+        ports_fdb.vlan|s
         ports_fdb.vlan_id|s
         ports_nac.auth_id|s
         ports_nac.authc_status|s
@@ -1071,6 +1097,7 @@ internal static class AlertConditionFieldCatalog
         processors.processor_index|s
         processors.processor_oid|s
         processors.processor_perc_warn|s
+        processors.processor_perc_warn_custom|s
         processors.processor_precision|s
         processors.processor_type|s
         processors.processor_usage|s
@@ -1138,6 +1165,7 @@ internal static class AlertConditionFieldCatalog
         route.port_id|s
         route.route_id|s
         route.updated_at|d
+        sensors.category|s
         sensors.entPhysicalIndex|s
         sensors.entPhysicalIndex_measured|s
         sensors.group|s
@@ -1327,6 +1355,7 @@ internal static class AlertConditionFieldCatalog
         users.email|s
         users.enabled|s
         users.password|s
+        users.phone|s
         users.realname|s
         users.remember_token|s
         users.updated_at|d
@@ -1352,6 +1381,7 @@ internal static class AlertConditionFieldCatalog
         vlans.vlan_state|s
         vlans.vlan_type|s
         vlans.vlan_vlan|s
+        vminfo.cluster_id|s
         vminfo.id|s
         vminfo.vm_type|s
         vminfo.vmwVmCpus|s
@@ -1365,9 +1395,15 @@ internal static class AlertConditionFieldCatalog
         vrf_lite_cisco.vrf_lite_cisco_id|s
         vrf_lite_cisco.vrf_name|s
         vrfs.bgpLocalAs|s
+        vrfs.context_enabled|s
+        vrfs.context_failures|s
+        vrfs.context_manual|s
+        vrfs.context_name|s
+        vrfs.context_verified|s
         vrfs.mplsVpnVrfDescription|s
         vrfs.mplsVpnVrfRouteDistinguisher|s
         vrfs.vrf_id|s
+        vrfs.vrf_manual|s
         vrfs.vrf_name|s
         vrfs.vrf_oid|s
         wireless_sensors.access_point_id|s

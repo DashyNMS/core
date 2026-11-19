@@ -67,11 +67,24 @@ public sealed record AlertConditionFieldGroup(string Name, IReadOnlyList<AlertCo
 /// <c>resources/definitions/config_definitions.json</c> (skipping the
 /// <c>past_&lt;n&gt;m</c> ones, which aren't plain field comparisons).
 /// <see cref="AlertConditionFieldCatalog"/> is that algorithm replayed
-/// offline against those two files - 115 tables, 1,385 fields.
+/// offline against those two files - 117 tables and the macros, 1,421 fields.
 /// </para>
 /// <para>
-/// To regenerate after a LibreNMS schema change, re-run that port against the
-/// current <c>db_schema.yaml</c> and <c>config_definitions.json</c>. Column
+/// It is the union of every release Core supports, so a saved condition on a
+/// since-removed column still opens: last audited against LibreNMS 26.10.0
+/// and 26.11.0 (tag commit 49d74d0) with <c>tools/AlertConditionCatalog.cs</c>,
+/// which replays the table and relationship rules and prints one release's
+/// fields. <see cref="AlertRuleCompatibility"/> records which fields each
+/// release removed or added, so new conditions offer only the connected
+/// server's. The <c>secrets</c> table LibreNMS 26.11 added is left out on
+/// purpose: its builder reaches it only through the polling-method
+/// <c>secret_id</c> naming guess, and it holds stored credentials, not
+/// anything a rule should test.
+/// </para>
+/// <para>
+/// To update after a LibreNMS schema change, run that tool against the old
+/// and new <c>db_schema.yaml</c>, add the new fields here and list both
+/// sides of the diff in <see cref="AlertRuleCompatibility"/>. Column
 /// types follow LibreNMS's own mapping, including its quirks: every integer
 /// column is typed <c>string</c> (there's a <c>TODO</c> in its source about
 /// that), <c>char</c>/<c>decimal</c>/<c>longtext</c>/<c>mediumtext</c> columns

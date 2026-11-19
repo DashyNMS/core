@@ -1,0 +1,3 @@
+{ "status": "ok", "ports": [
+  { "port_id": 1019, "device_id": 1, "ifName": "19", "ifType": "ethernetCsmacd", "fdb_entries_count": 1 },
+  { "port_id": 1021, "device_id": 1, "ifName": "21", "ifType": "ethernetCsmacd", "fdb_entries_count": 1 } ], "count": 2 }

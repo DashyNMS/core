@@ -1,0 +1,4 @@
+{ "status": "ok", "ports": [
+  { "port_id": 1019, "device_id": 1, "ifName": "19", "ifDescr": "GigabitEthernet1/0/19", "ifAlias": "Lobby display", "ifType": "ethernetCsmacd", "fdb_entries_count": 1 },
+  { "port_id": 2037, "device_id": 2, "ifName": "Eth1/37", "ifDescr": "Ethernet1/37", "ifAlias": "sw-access-01", "ifType": "ethernetCsmacd", "fdb_entries_count": 5 },
+  { "port_id": 4001, "device_id": 4, "ifName": "A1", "ifDescr": "A1", "ifAlias": "Uplink", "ifType": "ethernetCsmacd", "fdb_entries_count": 100 } ], "count": 3 }

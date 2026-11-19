@@ -329,6 +329,47 @@ public sealed class AppSettings
 
     public const string PortsLayoutCards = "Cards";
 
+    /// <summary>
+    /// How Network Search writes MAC addresses (#91): a <see cref="Search.MacAddressFormat"/>
+    /// name - Colon (LibreNMS's own), Hyphen, Dotted or Bare. Text rather than the
+    /// enum so an unknown value from a newer or hand-edited file reads as Colon
+    /// (<see cref="Normalise"/>) instead of failing the load.
+    /// </summary>
+    public string NetworkSearchMacFormat { get; set; } = nameof(Search.MacAddressFormat.Colon);
+
+    /// <summary>
+    /// Network Search's recent queries, newest first, at most
+    /// <see cref="MaxNetworkSearchRecent"/>, so the user can switch between them.
+    /// They name addresses on the user's network, so they stay on this device
+    /// and go with the settings file when signing out (<see cref="LocalDataReset"/>).
+    /// </summary>
+    public List<string> NetworkSearchRecent { get; set; } = new();
+
+    public const int MaxNetworkSearchRecent = 10;
+
+    /// <summary><see cref="NetworkSearchMacFormat"/> as the enum, Colon for anything unknown.</summary>
+    public Search.MacAddressFormat NetworkSearchMacFormatValue =>
+        Enum.TryParse<Search.MacAddressFormat>(NetworkSearchMacFormat, ignoreCase: false, out var format) && Enum.IsDefined(format)
+            ? format
+            : Search.MacAddressFormat.Colon;
+
+    /// <summary>Puts <paramref name="query"/> first in <see cref="NetworkSearchRecent"/>, without repeats, trimmed to the limit. Blank queries aren't kept.</summary>
+    public void RememberNetworkSearch(string? query)
+    {
+        var text = query?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        NetworkSearchRecent.RemoveAll(q => string.Equals(q, text, StringComparison.OrdinalIgnoreCase));
+        NetworkSearchRecent.Insert(0, text);
+        if (NetworkSearchRecent.Count > MaxNetworkSearchRecent)
+        {
+            NetworkSearchRecent.RemoveRange(MaxNetworkSearchRecent, NetworkSearchRecent.Count - MaxNetworkSearchRecent);
+        }
+    }
+
     /// <summary>Map nodes wobble like jelly when dragged, and their links bow and settle (#207). Purely visual - the saved layout is always where a node is dropped. On by default (#222), and does nothing while Windows animations are off.</summary>
     public bool JigglePhysicsOnMaps { get; set; } = true;
 
@@ -447,6 +488,8 @@ public sealed class AppSettings
         PortGraphsCollapsed = PortGraphsCollapsed,
         PortGroupBy = PortGroupBy,
         PortsLayout = PortsLayout,
+        NetworkSearchMacFormat = NetworkSearchMacFormat,
+        NetworkSearchRecent = NetworkSearchRecent.ToList(),
         JigglePhysicsOnMaps = JigglePhysicsOnMaps,
         AccentColor = AccentColor,
         Theme = Theme,
@@ -489,6 +532,14 @@ public sealed class AppSettings
         {
             PortsLayout = PortsLayoutTable;
         }
+
+        NetworkSearchMacFormat = NetworkSearchMacFormatValue.ToString();
+        NetworkSearchRecent = (NetworkSearchRecent ?? new List<string>())
+            .Where(q => !string.IsNullOrWhiteSpace(q))
+            .Select(q => q.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(MaxNetworkSearchRecent)
+            .ToList();
 
         if (string.IsNullOrWhiteSpace(MapTileUrl))
         {

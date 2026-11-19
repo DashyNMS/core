@@ -1,0 +1,3 @@
+{ "status": "ok", "links": [
+  { "id": 71, "local_device_id": 2, "local_port_id": 2037, "remote_device_id": 1, "remote_port_id": 1048, "remote_hostname": "sw-access-01.example.net", "remote_port": "Gi1/0/48", "protocol": "lldp", "active": true },
+  { "id": 72, "local_device_id": 4, "local_port_id": 4001, "remote_device_id": 2, "remote_port_id": 2001, "remote_hostname": "sw-core-01.example.net", "remote_port": "Eth1/1", "protocol": "lldp", "active": true } ], "count": 2 }

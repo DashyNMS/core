@@ -1,0 +1,13 @@
+{
+    "status": "ok",
+    "ports_fdb": [
+        { "ports_fdb_id": 101, "port_id": 1001, "mac_address": "00005e005301", "vlan": 2074, "device_id": 1, "created_at": "2026-11-17 11:00:00", "updated_at": "2026-11-17 11:50:00" },
+        { "ports_fdb_id": 102, "port_id": 1002, "mac_address": "00005e005302", "vlan": 2099, "device_id": 1, "created_at": "2026-11-17 11:00:00", "updated_at": "2026-11-17 11:50:00" },
+        { "ports_fdb_id": 103, "port_id": 1002, "mac_address": "00005e005303", "vlan": null, "device_id": 1, "created_at": "2026-11-17 11:00:00", "updated_at": "2026-11-17 11:50:00" },
+        { "ports_fdb_id": 104, "port_id": 1003, "mac_address": "00005e005304", "vlan": 3010, "device_id": 1, "created_at": "2026-11-17 11:00:00", "updated_at": "2026-11-17 11:50:00" },
+        { "ports_fdb_id": 105, "port_id": 1003, "mac_address": "00005e005305", "vlan": 50, "device_id": 1, "created_at": "2026-11-17 11:00:00", "updated_at": "2026-11-17 11:50:00" },
+        { "ports_fdb_id": 106, "port_id": 1003, "mac_address": "00005e005306", "vlan": 0, "device_id": 1, "created_at": "2026-11-17 11:00:00", "updated_at": "2026-11-17 11:50:00" },
+        { "ports_fdb_id": 107, "port_id": 1003, "mac_address": "00005e005307", "vlan": 4095, "device_id": 1, "created_at": "2026-11-17 11:00:00", "updated_at": "2026-11-17 11:50:00" }
+    ],
+    "count": 7
+}

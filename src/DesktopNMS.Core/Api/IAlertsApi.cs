@@ -255,6 +255,17 @@ public interface IPortsApi
     /// (an access-only switchport, an unrouted management VLAN).
     /// </summary>
     Task<IReadOnlyList<DeviceIpAddress>> ListIpAddressesAsync(int deviceId, CancellationToken cancellationToken = default);
+
+    /// <summary>GET /api/v0/ports/{id}. One port, or null when it no longer exists.</summary>
+    Task<Port?> GetAsync(int portId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// GET /api/v0/ports/mac/{mac}. Every port whose forwarding table has
+    /// learned <paramref name="mac"/>, with <see cref="Port.FdbEntriesCount"/>
+    /// set - the fewest-MACs port first, usually the one the host plugs into.
+    /// An unlearned MAC (a 404 upstream) is returned as empty.
+    /// </summary>
+    Task<IReadOnlyList<Port>> FindByLearnedMacAsync(string mac, CancellationToken cancellationToken = default);
 }
 
 /// <summary>MAC address forwarding table (FDB) endpoints.</summary>
@@ -262,6 +273,21 @@ public interface IFdbApi
 {
     /// <summary>GET /api/v0/devices/{id}/fdb. Every MAC address the switch has learned, and which port/VLAN it was seen on.</summary>
     Task<IReadOnlyList<FdbEntry>> ListForDeviceAsync(int deviceId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// GET /api/v0/resources/fdb/{mac} - every forwarding-table entry,
+    /// fleet-wide, for one MAC address (12 hex digits, any case or
+    /// separators). LibreNMS answers a MAC no switch has learned with a 404,
+    /// which this returns as an empty list: no entry, not a failure.
+    /// </summary>
+    Task<IReadOnlyList<FdbEntry>> FindByMacAsync(string mac, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The vendor LibreNMS's OUI table names for <paramref name="mac"/>, from
+    /// GET /api/v0/resources/fdb/{mac}/detail. Null when it has none, or no
+    /// switch has learned the MAC (the endpoint only answers for learned ones).
+    /// </summary>
+    Task<string?> FindVendorAsync(string mac, CancellationToken cancellationToken = default);
 }
 
 /// <summary>ARP table endpoints.</summary>
@@ -288,6 +314,36 @@ public interface IArpApi
     /// Neighbours tab gives an IP to a neighbour LibreNMS doesn't monitor.
     /// </summary>
     Task<IReadOnlyList<ArpEntry>> ListAllAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// GET /api/v0/resources/ip/arp/{address} - every ARP entry, fleet-wide,
+    /// for one IPv4 address. ARP is IPv4 only; LibreNMS's API has no
+    /// equivalent for IPv6 neighbour discovery.
+    /// </summary>
+    Task<IReadOnlyList<ArpEntry>> FindByAddressAsync(System.Net.IPAddress address, CancellationToken cancellationToken = default);
+
+    /// <summary>GET /api/v0/resources/ip/arp/{network}/{prefix} - every ARP entry, fleet-wide, inside one IPv4 network.</summary>
+    Task<IReadOnlyList<ArpEntry>> FindInNetworkAsync(System.Net.IPAddress network, int prefixLength, CancellationToken cancellationToken = default);
+}
+
+/// <summary>IP network endpoints - the subnets LibreNMS has seen configured on monitored interfaces.</summary>
+public interface IIpNetworksApi
+{
+    /// <summary>
+    /// GET /api/v0/resources/ip/networks/{ipv4|ipv6}. Every network of one
+    /// family. LibreNMS answers "none" with a 404, returned here as empty.
+    /// </summary>
+    Task<IReadOnlyList<IpNetwork>> ListAsync(System.Net.Sockets.AddressFamily family, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// GET /api/v0/resources/ip/networks/{id}/ip. The interface addresses
+    /// LibreNMS has in one network - the monitored routers and hosts on it.
+    /// An empty network (a 404 upstream) is returned as empty. IPv4 and IPv6
+    /// networks are numbered separately and LibreNMS answers an id with both
+    /// tables' addresses, so pass the network's <paramref name="family"/> to
+    /// get only its own.
+    /// </summary>
+    Task<IReadOnlyList<IpNetworkAddress>> ListAddressesAsync(int networkId, System.Net.Sockets.AddressFamily? family = null, CancellationToken cancellationToken = default);
 }
 
 /// <summary>VLAN endpoints.</summary>
@@ -299,7 +355,9 @@ public interface IVlansApi
     /// internal <see cref="Vlan.VlanId"/> a caller would need to resolve
     /// <see cref="FdbEntry.VlanId"/> (the per-device /devices/{id}/vlans
     /// endpoint omits it), so this fetches the whole list and callers filter
-    /// by <see cref="Vlan.DeviceId"/> themselves.
+    /// by <see cref="Vlan.DeviceId"/> themselves. Read forwarding-table VLANs
+    /// through <see cref="DesktopNMS.Core.Devices.FdbVlanResolver"/>, which also
+    /// handles 26.11's direct numbers.
     /// </summary>
     Task<IReadOnlyList<Vlan>> ListAsync(CancellationToken cancellationToken = default);
 }
