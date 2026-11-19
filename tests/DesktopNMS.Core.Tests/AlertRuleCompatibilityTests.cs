@@ -112,6 +112,8 @@ public class AlertRuleCompatibilityTests
     [InlineData("SELECT * FROM devices,ports_fdb WHERE `ports_fdb`.`vlan_id` = 12", "ports_fdb.vlan_id")]
     [InlineData("SELECT * FROM devices,ports_fdb WHERE vlan_id = 12", "ports_fdb.vlan_id")]
     [InlineData("SELECT vlan_id FROM ports_fdb;", "ports_fdb.vlan_id")] // a terminated statement
+    [InlineData("SELECT vlan_id FROM ports_fdb WHERE EXISTS (SELECT 1 FROM vlans)", "ports_fdb.vlan_id")] // a subquery's tables are its own
+    [InlineData("SELECT * FROM devices AS timeout WHERE timeout > 5", "devices.timeout")] // an alias doesn't hide a real column
     [InlineData("SELECT vlan_id FROM ports_fdb\nAS f WHERE vlan_id = 12", "ports_fdb.vlan_id")] // a newline before the alias
     [InlineData("SELECT vlan_id FROM\tports_fdb WHERE vlan_id = 12", "ports_fdb.vlan_id")]
     [InlineData("SELECT * FROM devices LEFT JOIN proxmox ON proxmox.device_id = devices.device_id WHERE proxmox.vmid = 100", "proxmox.vmid")]

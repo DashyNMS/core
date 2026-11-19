@@ -265,19 +265,24 @@ public static class AlertRuleCompatibility
         {
             // Quoted values are data, not columns: a rule matching os = 'timeout' tests no column.
             var text = Regex.Replace(sql.Replace("`", string.Empty, StringComparison.Ordinal), @"'(?:[^'\\]|\\.)*'|""(?:[^""\\]|\\.)*""", "''");
-            var (named, aliases) = NamedTables(text);
-            foreach (var removed in RemovedFields)
+            // Each query block resolves its own bare columns: a subquery's
+            // tables don't make the outer query's columns ambiguous.
+            foreach (var block in QueryBlocks(text))
             {
-                var qualified = $@"(?<![\w.]){Regex.Escape(removed.Table)}\.{Regex.Escape(removed.Column)}(?!\w)";
-
-                // A bare column, but not a qualifier ("port.device_id") or an
-                // alias being declared ("JOIN ports AS port"), and never a
-                // name the query uses as an alias.
-                var bare = $@"(?<![\w.])(?<!\bas\s+){Regex.Escape(removed.Column)}(?![\w.])";
-                if (Regex.IsMatch(text, qualified, RegexOptions.IgnoreCase)
-                    || (!aliases.Contains(removed.Column) && BareMeansOnly(removed, named) && Regex.IsMatch(text, bare, RegexOptions.IgnoreCase)))
+                var (named, scrubbed) = NamedTables(block);
+                foreach (var removed in RemovedFields)
                 {
-                    found.Add(removed);
+                    var qualified = $@"(?<![\w.]){Regex.Escape(removed.Table)}\.{Regex.Escape(removed.Column)}(?!\w)";
+
+                    // A bare column, but not a qualifier ("port.device_id"). Alias
+                    // declarations are already gone from the scrubbed text, so
+                    // "FROM devices AS timeout WHERE timeout > 5" still counts.
+                    var bare = $@"(?<![\w.]){Regex.Escape(removed.Column)}(?![\w.])";
+                    if (Regex.IsMatch(block, qualified, RegexOptions.IgnoreCase, RegexTimeout)
+                        || (BareMeansOnly(removed, named) && Regex.IsMatch(scrubbed, bare, RegexOptions.IgnoreCase, RegexTimeout)))
+                    {
+                        found.Add(removed);
+                    }
                 }
             }
         }
@@ -309,11 +314,57 @@ public static class AlertRuleCompatibility
 
     private static readonly char[] SqlWhitespace = [' ', '\t', '\r', '\n'];
 
-    /// <summary>The tables a query names after FROM (including comma lists) or JOIN, and the aliases it gives them.</summary>
-    private static (IReadOnlySet<string> Tables, IReadOnlySet<string> Aliases) NamedTables(string sql)
+    /// <summary>Rule SQL is short; a pattern that runs this long is stuck, not working.</summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// A query and each of its subqueries as separate blocks, innermost first,
+    /// each with its nested subqueries replaced by a placeholder.
+    /// </summary>
+    private static IEnumerable<string> QueryBlocks(string sql)
+    {
+        var text = sql;
+        while (true)
+        {
+            var start = text.LastIndexOf("(select", StringComparison.OrdinalIgnoreCase);
+            var compact = Regex.Match(text, @"\(\s+select\b", RegexOptions.IgnoreCase | RegexOptions.RightToLeft, RegexTimeout);
+            if (compact.Success && compact.Index > start)
+            {
+                start = compact.Index;
+            }
+
+            if (start < 0)
+            {
+                yield return text;
+                yield break;
+            }
+
+            var depth = 0;
+            var end = start;
+            for (; end < text.Length; end++)
+            {
+                depth += text[end] switch { '(' => 1, ')' => -1, _ => 0 };
+                if (depth == 0)
+                {
+                    break;
+                }
+            }
+
+            end = Math.Min(end, text.Length - 1);
+            yield return text[(start + 1)..end];
+            text = text[..start] + " (subquery) " + text[(end + 1)..];
+        }
+    }
+
+    /// <summary>
+    /// The tables one query block names after FROM (including comma lists) or
+    /// JOIN, and the block with alias declarations removed, so an alias is
+    /// never read as a column while a real column of the same name still is.
+    /// </summary>
+    private static (IReadOnlySet<string> Tables, string Scrubbed) NamedTables(string sql)
     {
         var tables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scrubbed = sql;
 
         void Add(string declaration)
         {
@@ -329,7 +380,7 @@ public static class AlertRuleCompatibility
                 : null;
             if (alias is not null)
             {
-                aliases.Add(alias);
+                scrubbed = Regex.Replace(scrubbed, $@"(?<![\w.]){Regex.Escape(words[0])}\s+(?:as\s+)?{Regex.Escape(alias)}(?![\w.])", words[0], RegexOptions.IgnoreCase, RegexTimeout);
             }
         }
 
@@ -346,7 +397,7 @@ public static class AlertRuleCompatibility
             Add(join.Groups[1].Value);
         }
 
-        return (tables, aliases);
+        return (tables, scrubbed);
     }
 
     private static IEnumerable<string> BuilderFields(string? builderJson)
