@@ -126,6 +126,8 @@ public class AlertRuleCompatibilityTests
     [InlineData("SELECT * FROM devices,vlans WHERE vlans.vlan_id = 12")] // another table's vlan_id
     [InlineData("SELECT * FROM devices,ports_fdb,vlans WHERE vlan_id = 12")] // bare and ambiguous
     [InlineData("SELECT * FROM ports_fdb WHERE EXISTS (SELECT 1 FROM vlans WHERE vlan_id = 12)")] // the inner vlans owns it
+    [InlineData("SELECT ports_fdb.vlan AS vlan_id FROM ports_fdb")] // a result alias, not the column
+    [InlineData("SELECT * FROM ports_fdb WHERE EXISTS (SELECT 1 FROM (SELECT 1 AS x) d WHERE vlan_id = 12)")] // a derived table's columns are unknown
     [InlineData("SELECT * FROM devices,vminfo WHERE vminfo.id = 4")] // another table's id
     [InlineData("SELECT * FROM devices,ports WHERE id = 4 AND ports.port_id = 1")] // a bare id with no proxmox table
     [InlineData("SELECT * FROM devices,ports_fdb WHERE ports_fdb.vlan = 12")] // the new field

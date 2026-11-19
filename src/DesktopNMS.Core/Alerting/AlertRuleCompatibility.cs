@@ -280,6 +280,14 @@ public static class AlertRuleCompatibility
                 for (var at = i; at >= 0; at = blocks[at].Parent)
                 {
                     chain.Add(scopes[at].Tables);
+
+                    // A derived table (a subquery in FROM) has columns this can't
+                    // see, so a bare name may be one of them: look no further out.
+                    if (DerivedTable().IsMatch(blocks[at].Text))
+                    {
+                        chain.Add(Opaque);
+                        break;
+                    }
                 }
 
                 foreach (var removed in RemovedFields)
@@ -318,6 +326,11 @@ public static class AlertRuleCompatibility
         var owners = TablesByColumn.TryGetValue(removed.Column, out var tables) ? tables : [removed.Table];
         foreach (var named in scopes)
         {
+            if (ReferenceEquals(named, Opaque))
+            {
+                return false;
+            }
+
             // The nearest scope with a table that has the column decides.
             if (owners.Any(named.Contains))
             {
@@ -332,6 +345,11 @@ public static class AlertRuleCompatibility
     }
 
     private static readonly char[] SqlWhitespace = [' ', '\t', '\r', '\n'];
+
+    /// <summary>Stands for a derived table's unknown columns in a scope chain.</summary>
+    private static readonly IReadOnlySet<string> Opaque = new HashSet<string>();
+
+    private static Regex DerivedTable() => new(@"(?:\bfrom|\bjoin|,)\s*\(subquery\d+\)", RegexOptions.IgnoreCase, RegexTimeout);
 
     /// <summary>Rule SQL is short; a pattern that runs this long is stuck, not working.</summary>
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
@@ -427,6 +445,8 @@ public static class AlertRuleCompatibility
             Add(join.Groups[1].Value);
         }
 
+        // A column alias ("SELECT vlan AS vlan_id") names a result, not a column.
+        scrubbed = Regex.Replace(scrubbed, @"\bas\s+\w+", " ", RegexOptions.IgnoreCase, RegexTimeout);
         return (tables, scrubbed);
     }
 
