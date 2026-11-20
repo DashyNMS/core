@@ -13,6 +13,7 @@ public sealed class ApiRequestObservationTests
     [InlineData("alerts", ApiOperation.Alerts)]
     [InlineData("faults", ApiOperation.Alerts)]
     [InlineData("faults?state=-1", ApiOperation.Alerts)]
+    [InlineData("/faults/", ApiOperation.Alerts)]
     [InlineData("faults/9001", ApiOperation.Other)]
     [InlineData("resources/sensors?token=private-token-canary", ApiOperation.Sensors)]
     [InlineData("devices/123/ports", ApiOperation.Other)]
@@ -74,9 +75,14 @@ public sealed class ApiRequestObservationTests
     }
 
     [Fact]
-    public void Acknowledging_a_fault_is_not_counted_as_alert_polling()
+    public void Polling_faults_with_an_explicit_get_is_alert_polling()
     {
         Assert.Equal(ApiOperation.Alerts, ApiRequestObservation.Classify("faults?state=-1", HttpMethod.Get));
+    }
+
+    [Fact]
+    public void Writes_to_faults_are_not_counted_as_alert_polling()
+    {
         Assert.Equal(ApiOperation.Other, ApiRequestObservation.Classify("faults/9001", HttpMethod.Put));
         Assert.Equal(ApiOperation.Other, ApiRequestObservation.Classify("faults", HttpMethod.Put));
     }
