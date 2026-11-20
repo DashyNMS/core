@@ -67,6 +67,45 @@ public sealed class IntelligenceStatusCardTests
         Assert.DoesNotContain(cards, c => c.Title == "Alert status");
     }
 
+    /// <summary>MCP's status words since mcp#121: ignored and unreported devices are named, never up or down.</summary>
+    [Theory]
+    [InlineData("up", "Up", "up")]
+    [InlineData("down", "Down", "down")]
+    [InlineData("disabled", "Disabled", "unknown")]
+    [InlineData("ignored", "Ignored", "unknown")]
+    [InlineData("maintenance", "Maintenance", "unknown")]
+    [InlineData("unknown", "Unknown", "unknown")]
+    [InlineData("sideways", "Unknown", "unknown")]
+    public void Device_rows_name_each_reported_state(string word, string status, string tone)
+    {
+        var card = Assert.Single(IntelligenceStatusCards.FromTool("find_device", $$"""
+            {"status":"ok","data":{"devices":[{"device_id":7,"hostname":"sw-a.example.net","status":"{{word}}"}]}}
+            """, Observed));
+        var row = Assert.Single(card.Rows);
+        Assert.Equal(status, row.Status);
+        Assert.Equal(tone, row.Tone);
+    }
+
+    [Fact]
+    public void Overview_counts_ignored_and_unreported_devices_apart()
+    {
+        var card = Assert.Single(IntelligenceStatusCards.FromTool("network_overview", """
+            {"status":"ok","data":{"devices":{"total":10,"up":5,"down":1,"disabled":1,"ignored":2,"unknown":1},"alerts":null}}
+            """, Observed));
+
+        Assert.Equal(["Devices up", "Devices down", "Devices disabled", "Devices ignored", "Devices with no reported state"], card.Rows.Select(r => r.Name));
+        Assert.Equal(["5", "1", "1", "2", "1"], card.Rows.Select(r => r.Detail));
+        Assert.Equal(10, card.Rows.Sum(r => int.Parse(r.Detail, System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
+    [Fact]
+    public void An_inline_ignored_status_is_a_neutral_label()
+    {
+        var label = IntelligenceInlineMarkup.Resolve("[[status:ignored]]", [])!;
+        Assert.Equal("Ignored", label.Name);
+        Assert.Equal("unknown", label.Tone);
+    }
+
     [Theory]
     [InlineData("{not json")]
     [InlineData("{\"status\":\"error\",\"message\":\"synthetic-private-token\"}")]

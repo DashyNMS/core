@@ -116,6 +116,10 @@ public static class IntelligenceStatusCards
                 AddCount(rows, devices, "up", "Devices up", "Up", "up");
                 AddCount(rows, devices, "down", "Devices down", "Down", "down");
                 AddCount(rows, devices, "disabled", "Devices disabled", "Disabled", "unknown");
+                // MCP counts each device once (mcp#121): ignored devices and those LibreNMS
+                // reported no state for are neither up nor down, so they get rows of their own.
+                AddCount(rows, devices, "ignored", "Devices ignored", "Ignored", "unknown");
+                AddCount(rows, devices, "unknown", "Devices with no reported state", "Unknown", "unknown");
                 if (rows.Count > 0) cards.Add(new("Device status", "Network overview", observedAt, rows.ToArray()));
                 rows.Clear();
                 var alerts = Get(data, "alerts");
@@ -158,7 +162,20 @@ public static class IntelligenceStatusCards
     private static IEnumerable<JsonElement> Items(JsonElement value) => value.ValueKind == JsonValueKind.Array ? value.EnumerateArray() : [];
     private static string Name(JsonElement device) => Clean(Text(device, "display") ?? Text(device, "hostname") ?? $"Device {Id(device)?.ToString() ?? "unknown"}");
     private static string Clean(string value) => new(value.Where(c => !char.IsControl(c)).Take(200).ToArray());
-    private static string DeviceState(string? state) => state switch { "up" => "Up", "down" => "Down", "disabled" => "Disabled", _ => "Unknown" };
+    /// <summary>
+    /// MCP's device status word as a card label. MCP reports LibreNMS's own state
+    /// (DashyNMS/mcp#121), so an ignored device is named as such rather than folded
+    /// into Unknown; anything unrecognised or missing stays Unknown, never Up or Down.
+    /// </summary>
+    private static string DeviceState(string? state) => state switch
+    {
+        "up" => "Up",
+        "down" => "Down",
+        "disabled" => "Disabled",
+        "ignored" => "Ignored",
+        "maintenance" => "Maintenance",
+        _ => "Unknown",
+    };
     private static string AlertState(string? state) => state switch { "active" => "Active", "acknowledged" => "Acknowledged", "partly_acknowledged" => "Partly acknowledged", "recovered" => "Recovered", _ => "State unknown" };
     private static (string Label, string Tone) Severity(string? severity) => severity switch { "critical" => ("Critical", "critical"), "warning" => ("Warning", "warning"), "ok" => ("OK", "up"), _ => ("Unknown", "unknown") };
 }
