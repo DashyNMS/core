@@ -9,8 +9,11 @@ namespace DesktopNMS.Core.Intelligence;
 /// </summary>
 public static class IntelligenceConsent
 {
-    /// <summary>1: what's sent and config backups. 2: adds web search and its search providers.</summary>
-    public const int CurrentVersion = 2;
+    /// <summary>
+    /// 1: what's sent and config backups. 2: adds web search and its search
+    /// providers. 3: adds Codex and Claude Code, which receive the same questions and tool results (#97).
+    /// </summary>
+    public const int CurrentVersion = 3;
 
     /// <summary>The current notice has been accepted.</summary>
     public static bool IsCurrent(AppSettings settings)

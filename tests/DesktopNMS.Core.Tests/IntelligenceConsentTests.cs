@@ -31,4 +31,12 @@ public sealed class IntelligenceConsentTests
 
         Assert.False(IntelligenceConsent.AllowsWebSearch(settings));
     }
+
+    [Fact]
+    public void A_notice_accepted_before_agent_providers_is_asked_again()
+    {
+        var settings = new AppSettings { IntelligenceConsentGiven = true, IntelligenceConsentVersion = 2 };
+
+        Assert.False(IntelligenceConsent.IsCurrent(settings));
+    }
 }
