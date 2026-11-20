@@ -29,6 +29,7 @@ public static partial class IntelligenceInlineMarkup
             ("status", "up") => ("Up", "up"),
             ("status", "down") => ("Down", "down"),
             ("status", "disabled") => ("Disabled", "unknown"),
+            ("status", "ignored") => ("Ignored", "unknown"),
             ("status", "unknown") => ("Unknown", "unknown"),
             ("severity", "critical") => ("Critical", "critical"),
             ("severity", "warning") => ("Warning", "warning"),

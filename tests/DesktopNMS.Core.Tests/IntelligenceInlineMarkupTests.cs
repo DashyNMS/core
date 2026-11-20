@@ -51,6 +51,7 @@ public sealed class IntelligenceInlineMarkupTests
     [Theory]
     [InlineData("[[status:up]]", "Up", "up")]
     [InlineData("[[status:down]]", "Down", "down")]
+    [InlineData("[[status:ignored]]", "Ignored", "unknown")]
     [InlineData("[[severity:critical]]", "Critical", "critical")]
     [InlineData("[[severity:warning]]", "Warning", "warning")]
     public void Display_labels_have_a_fixed_vocabulary(string marker, string label, string tone)
