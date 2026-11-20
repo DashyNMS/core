@@ -277,8 +277,25 @@ public sealed class AppSettings
     /// </summary>
     public int IntelligenceConsentVersion { get; set; }
 
-    /// <summary>The model a new conversation starts with (its slug); the first listed when unset or no longer offered.</summary>
+    /// <summary>The ChatGPT model a new conversation starts with (its slug); the first listed when unset or no longer offered.</summary>
     public string? IntelligenceModel { get; set; }
+
+    /// <summary>
+    /// The provider a new conversation starts with: <see cref="IntelligenceProviderChatGpt"/>,
+    /// <see cref="IntelligenceProviderCodex"/> or <see cref="IntelligenceProviderClaudeCode"/>
+    /// (#97). Each saved chat keeps its own, so changing this never moves an existing conversation.
+    /// </summary>
+    public string IntelligenceProvider { get; set; } = IntelligenceProviderChatGpt;
+
+    public const string IntelligenceProviderChatGpt = "chatgpt";
+    public const string IntelligenceProviderCodex = "codex";
+    public const string IntelligenceProviderClaudeCode = "claude-code";
+
+    /// <summary>
+    /// Each agent provider's own choices, keyed by its id. ChatGPT keeps
+    /// <see cref="IntelligenceModel"/>, so settings saved before providers existed carry on unchanged.
+    /// </summary>
+    public Dictionary<string, IntelligenceProviderSettings> IntelligenceProviders { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// How much config text the network tools return - the MCP server's
@@ -480,6 +497,8 @@ public sealed class AppSettings
         IntelligenceConsentGiven = IntelligenceConsentGiven,
         IntelligenceConsentVersion = IntelligenceConsentVersion,
         IntelligenceModel = IntelligenceModel,
+        IntelligenceProvider = IntelligenceProvider,
+        IntelligenceProviders = IntelligenceProviders.ToDictionary(kv => kv.Key, kv => kv.Value.Clone(), StringComparer.Ordinal),
         IntelligenceConfigText = IntelligenceConfigText,
         RecentlyViewedDeviceCount = RecentlyViewedDeviceCount,
         PinnedDevices = PinnedDevices.Select(d => d.Clone()).ToList(),
@@ -1421,6 +1440,30 @@ public sealed class NotificationSettings
 /// (<c>app/ApiClients/Unimus.php</c>) - that integration lives entirely in
 /// LibreNMS's web UI and isn't reachable via its versioned API.
 /// </summary>
+/// <summary>
+/// One agent provider's choices in Settings › Intelligence (#97). The agent
+/// keeps its own sign-in and configuration; DashyNMS stores only where to find
+/// it and what a new conversation starts with.
+/// </summary>
+public sealed class IntelligenceProviderSettings
+{
+    /// <summary>The agent's executable as the user chose it, or null to look for an installed one.</summary>
+    public string? ExecutablePath { get; set; }
+
+    /// <summary>The model a new conversation starts with, or null for the agent's own default.</summary>
+    public string? Model { get; set; }
+
+    /// <summary>The reasoning level a new conversation starts with, or null for the model's default.</summary>
+    public string? Effort { get; set; }
+
+    public IntelligenceProviderSettings Clone() => new()
+    {
+        ExecutablePath = ExecutablePath,
+        Model = Model,
+        Effort = Effort,
+    };
+}
+
 public sealed class UnimusSettings
 {
     public bool Enabled { get; set; }

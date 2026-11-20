@@ -11,6 +11,23 @@ public sealed class SavedIntelligenceChat
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public string? Model { get; set; }
 
+    /// <summary>
+    /// Which provider owns the conversation (#97): an
+    /// <see cref="Configuration.AppSettings.IntelligenceProvider"/> id, or null for a chat saved
+    /// before providers existed, which is ChatGPT's. A chat moves to another provider only when the user says so.
+    /// </summary>
+    public string? Provider { get; set; }
+
+    /// <summary>The reasoning level the chat asks with, or null for the model's default.</summary>
+    public string? Effort { get; set; }
+
+    /// <summary>
+    /// The agent provider's own session or thread to continue, as that agent
+    /// named it. Provider-internal: it isn't exported, and it's dropped when the
+    /// chat moves to another provider.
+    /// </summary>
+    public string? ProviderSession { get; set; }
+
     /// <summary>The chat's detail level (<see cref="IntelligenceDetail"/>); older chats hold a reply style, which Normalize maps.</summary>
     public string? ReplyStyle { get; set; }
     public DashyOutfit Outfit { get; set; }
