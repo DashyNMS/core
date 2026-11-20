@@ -108,6 +108,18 @@ publication is needed. After review and merge, the existing main workflow tests
 and publishes `2.0.0-ci.N`; consumers should pin the exact resulting version and
 verify its repository commit metadata.
 
+### Intelligence status words
+
+`IntelligenceStatusCards` reads MCP's device `status` as LibreNMS reports it
+(DashyNMS/mcp#121): `Ignored` and `Maintenance` are named on device rows, and
+anything unrecognised or missing stays `Unknown`. None of them takes an up or
+down tone. The network overview's Device status card adds "Devices ignored" and
+"Devices with no reported state" rows when MCP sends those counts, so its rows
+add up to the network. `[[status:ignored]]` renders as a neutral label. The
+model instruction blocks are unchanged. Desktop gets this by pinning the next
+`2.0.0-ci.N`. Mobile builds its own cards and needs no change; MCP isn't
+affected. This is a non-breaking fix in the 2.0 development stream.
+
 ## Build it
 
 You need the .NET 9 and .NET 10 SDKs.
