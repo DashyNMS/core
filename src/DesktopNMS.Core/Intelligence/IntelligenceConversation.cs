@@ -56,8 +56,8 @@ public sealed class IntelligenceConversation
     /// <summary>The output a call gets when the limit stops it running - every call needs one, or the next request is refused.</summary>
     internal const string NotRun = "Not run: this question has used all its lookups.";
 
-    /// <summary>The most characters one tool output adds to the history.</summary>
-    public const int MaxToolOutputChars = 24_000;
+    /// <summary>The most characters one tool output adds to the history - see <see cref="IntelligenceToolRunner.MaxOutputChars"/>.</summary>
+    public const int MaxToolOutputChars = IntelligenceToolRunner.MaxOutputChars;
 
     public const string ToolNamespace = "dashynms";
 
@@ -316,102 +316,30 @@ public sealed class IntelligenceConversation
     }
 
     /// <summary>
-    /// Runs one call and returns its output for the model: text, or text and
-    /// images (a graph) as input parts, which a function output can carry.
+    /// Runs one call through <see cref="IntelligenceToolRunner"/> and returns
+    /// its output for the model: text, or text and images (a graph) as input
+    /// parts, which a function output can carry.
     /// </summary>
     private async Task<JsonNode> RunAsync(JsonObject call, HashSet<string> known, IIntelligenceListener listener, CancellationToken cancellationToken)
     {
-        var name = ToolName(call["name"]?.GetValue<string>());
-        var arguments = call["arguments"]?.GetValue<string>() ?? "{}";
-
-        // Only a tool that was offered and is approved - whatever the model asks for.
-        if (name is null || !known.Contains(name) || !IntelligenceToolAllowlist.Names.Contains(name))
+        var outcome = await IntelligenceToolRunner.RunAsync(
+            _tools, known, ToolName(call["name"]?.GetValue<string>()), call["arguments"]?.GetValue<string>() ?? "{}", listener, cancellationToken).ConfigureAwait(false);
+        if (outcome.Images.Count == 0)
         {
-            return Error($"There is no tool called \"{call["name"]}\".");
+            return outcome.Text;
         }
 
-        JsonElement parsed;
-        try
+        var parts = new JsonArray(new JsonObject { ["type"] = "input_text", ["text"] = outcome.Text });
+        foreach (var image in outcome.Images)
         {
-            using var document = JsonDocument.Parse(arguments);
-            parsed = document.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            return Error("The arguments weren't valid JSON.");
-        }
-
-        if (parsed.ValueKind != JsonValueKind.Object)
-        {
-            return Error("The arguments must be a JSON object.");
-        }
-
-        listener.OnToolStarted(name, arguments);
-        IntelligenceToolResult result;
-        try
-        {
-            result = await _tools.CallAsync(name, parsed, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            listener.OnToolObserved(new(name, DateTimeOffset.UtcNow, "Lookup stopped before completion.", true));
-            listener.OnToolFinished(name, isError: true);
-            throw;
-        }
-        catch (Exception)
-        {
-            listener.OnToolObserved(new(name, DateTimeOffset.UtcNow, "Lookup failed. No successful result was returned.", true));
-            listener.OnToolFinished(name, isError: true);
-            // Exception messages can contain request URLs, credentials or raw server data.
-            return Error("The network tool failed. Try again or check the connection settings.");
-        }
-
-        var observation = IntelligenceToolObservation.FromResult(name, result, DateTimeOffset.UtcNow);
-        listener.OnToolObserved(observation);
-        listener.OnToolFinished(name, observation.IsError);
-        var text = result.Output.Length > MaxToolOutputChars
-            ? result.Output[..MaxToolOutputChars] + "\n[Output shortened.]"
-            : result.Output;
-        if (result.IsError)
-        {
-            return Error(text);
-        }
-
-        foreach (var card in IntelligenceStatusCards.FromTool(name, result.Output, DateTimeOffset.UtcNow))
-            listener.OnStatusCard(card);
-
-        var offered = result.Images ?? Array.Empty<IntelligenceImage>();
-        var images = offered
-            .Where(i => i.Data.Length is > 0 and <= IntelligenceImage.MaxBytes && i.MimeType.StartsWith("image/", StringComparison.Ordinal))
-            .Take(MaxImagesPerCall)
-            .ToList();
-
-        // The tool's own text may say a graph is attached: say which never reached the user.
-        if (offered.Count > images.Count)
-        {
-            var withheld = offered.Count - images.Count;
-            text += withheld == 1
-                ? $"\n[1 image from this lookup wasn't attached for you or shown to the user: it was empty, too large, not an image or over the limit of {MaxImagesPerCall}.]"
-                : $"\n[{withheld} images from this lookup weren't attached for you or shown to the user: they were empty, too large, not images or over the limit of {MaxImagesPerCall}.]";
-        }
-
-        if (images.Count == 0)
-        {
-            return text;
-        }
-
-        var parts = new JsonArray(new JsonObject { ["type"] = "input_text", ["text"] = text });
-        foreach (var image in images)
-        {
-            listener.OnImage(image);
             parts.Add(new JsonObject { ["type"] = "input_image", ["image_url"] = image.DataUrl });
         }
 
         return parts;
     }
 
-    /// <summary>The most images one tool call shows and sends.</summary>
-    public const int MaxImagesPerCall = 2;
+    /// <summary>The most images one tool call shows and sends - see <see cref="IntelligenceToolRunner.MaxImagesPerCall"/>.</summary>
+    public const int MaxImagesPerCall = IntelligenceToolRunner.MaxImagesPerCall;
 
     /// <summary>A function name, with any namespace prefix the API adds taken off.</summary>
     private static string? ToolName(string? name)
@@ -432,8 +360,6 @@ public sealed class IntelligenceConversation
 
         return name;
     }
-
-    private static string Error(string message) => new JsonObject { ["error"] = message }.ToJsonString();
 
     /// <summary>The approved tools as Responses function tools, grouped in one namespace as the preview route requires.</summary>
     private static JsonArray BuildTools(IReadOnlyList<IntelligenceTool> tools)

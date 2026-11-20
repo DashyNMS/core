@@ -10,7 +10,11 @@ namespace DesktopNMS.Core.Intelligence;
 /// and web search blocks only when they apply - every line is sent with every
 /// round of every question, so nothing is sent that doesn't bear on it.
 /// </summary>
-internal static class IntelligenceInstructions
+/// <remarks>
+/// Public so every route gives the model the same instructions (#97): an
+/// agent provider in Desktop receives exactly what the ChatGPT route sends.
+/// </remarks>
+public static class IntelligenceInstructions
 {
     private const string Prefix = "DesktopNMS.Core.Intelligence.Instructions.";
 
@@ -19,6 +23,9 @@ internal static class IntelligenceInstructions
     /// <summary>The most Spotlight objects described: as many as desktop lets a chat hold.</summary>
     internal const int MaxSpotlightObjects = 32;
 
+    /// <param name="detail">The detail level (<see cref="IntelligenceDetail"/>); older reply styles are mapped.</param>
+    /// <param name="spotlight">Objects already checked on this connection; described by kind and ID only, never by name.</param>
+    /// <param name="webSearchEnabled">Whether the route offers web search for this question.</param>
     public static string Build(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight, bool webSearchEnabled)
     {
         var blocks = new List<string>
