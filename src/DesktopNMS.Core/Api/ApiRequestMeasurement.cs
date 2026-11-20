@@ -12,11 +12,20 @@ public sealed record ApiRequestMeasurement(ApiOperation Operation, TimeSpan Dura
 
 internal static class ApiRequestObservation
 {
+    /// <summary>
+    /// The fixed operation a request is measured under. LibreNMS 26.10 polls
+    /// alerts as "faults" (and probes "faults?state=-1"), so those count as
+    /// <see cref="ApiOperation.Alerts"/> too: otherwise 26.10 servers' alert
+    /// polling would read as "other" and couldn't be compared with older ones.
+    /// Only GETs are classified: a write (acknowledging, unmuting) is never
+    /// polling, so any other method is <see cref="ApiOperation.Other"/>. The
+    /// query string is ignored, so filters never split a category.
+    /// </summary>
     internal static ApiOperation Classify(string relativeUrl, HttpMethod? method = null) => method is not null && method != HttpMethod.Get
         ? ApiOperation.Other : relativeUrl.Split('?')[0].Trim('/') switch
     {
         "devices" => ApiOperation.DeviceList,
-        "alerts" => ApiOperation.Alerts,
+        "alerts" or "faults" => ApiOperation.Alerts,
         "resources/sensors" => ApiOperation.Sensors,
         _ => ApiOperation.Other,
     };

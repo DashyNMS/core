@@ -10,6 +10,11 @@ public sealed class ApiRequestObservationTests
     [Theory]
     [InlineData("devices?hostname=private-host-canary", ApiOperation.DeviceList)]
     [InlineData("alerts?device_id=123", ApiOperation.Alerts)]
+    [InlineData("alerts", ApiOperation.Alerts)]
+    [InlineData("faults", ApiOperation.Alerts)]
+    [InlineData("faults?state=-1", ApiOperation.Alerts)]
+    [InlineData("/faults/", ApiOperation.Alerts)]
+    [InlineData("faults/9001", ApiOperation.Other)]
     [InlineData("resources/sensors?token=private-token-canary", ApiOperation.Sensors)]
     [InlineData("devices/123/ports", ApiOperation.Other)]
     public async Task Callback_has_only_fixed_metadata(string route, ApiOperation category)
@@ -67,6 +72,19 @@ public sealed class ApiRequestObservationTests
     public void Writes_to_devices_are_not_classified_as_device_list_reads()
     {
         Assert.Equal(ApiOperation.Other, ApiRequestObservation.Classify("devices", HttpMethod.Post));
+    }
+
+    [Fact]
+    public void Polling_faults_with_an_explicit_get_is_alert_polling()
+    {
+        Assert.Equal(ApiOperation.Alerts, ApiRequestObservation.Classify("faults?state=-1", HttpMethod.Get));
+    }
+
+    [Fact]
+    public void Writes_to_faults_are_not_counted_as_alert_polling()
+    {
+        Assert.Equal(ApiOperation.Other, ApiRequestObservation.Classify("faults/9001", HttpMethod.Put));
+        Assert.Equal(ApiOperation.Other, ApiRequestObservation.Classify("faults", HttpMethod.Put));
     }
 
     [Fact]
