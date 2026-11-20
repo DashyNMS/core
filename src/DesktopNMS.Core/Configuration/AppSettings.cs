@@ -291,6 +291,7 @@ public sealed class AppSettings
     public const string IntelligenceProviderCodex = "codex";
     public const string IntelligenceProviderClaudeCode = "claude-code";
     public const string IntelligenceProviderCopilot = "copilot";
+    public const string IntelligenceProviderGemini = "gemini";
 
     /// <summary>ChatGPT answers through DashyNMS's own sign-in - see <see cref="IntelligenceProviderSettings.Connection"/>.</summary>
     public const string IntelligenceConnectionSignIn = "signin";
