@@ -61,7 +61,7 @@ public sealed class IntelligenceProviderSettingsTests
         var chosen = JsonSerializer.Deserialize<IntelligenceProviderSettings>("""{"Model":"model-a"}""")!;
 
         Assert.True(chosen.Enabled);
-        Assert.False(chosen.Added);
+        Assert.Null(chosen.Added);
         Assert.Empty(chosen.HiddenModels);
         Assert.Null(chosen.Connection);
     }

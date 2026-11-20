@@ -1464,10 +1464,11 @@ public sealed class IntelligenceProviderSettings
     public string? Effort { get; set; }
 
     /// <summary>
-    /// Shown in Settings' provider list: added there by the user, or found
-    /// installed. ChatGPT is always listed.
+    /// Whether Settings lists the provider: true once added, false once
+    /// removed - then it stays off the list even when installed - and null
+    /// until either, when it's listed if it's found installed. ChatGPT is always listed.
     /// </summary>
-    public bool Added { get; set; }
+    public bool? Added { get; set; }
 
     /// <summary>Offered in the model picker. Off keeps the provider set up but out of the way.</summary>
     public bool Enabled { get; set; } = true;
