@@ -78,12 +78,29 @@ public sealed class IntelligenceStatusCardTests
     [InlineData("sideways", "Unknown", "unknown")]
     public void Device_rows_name_each_reported_state(string word, string status, string tone)
     {
-        var card = Assert.Single(IntelligenceStatusCards.FromTool("find_device", $$"""
-            {"status":"ok","data":{"devices":[{"device_id":7,"hostname":"sw-a.example.net","status":"{{word}}"}]}}
-            """, Observed));
+        var device = "{\"device_id\":7,\"hostname\":\"sw-a.example.net\",\"status\":\"" + word + "\"}";
+        var card = Assert.Single(IntelligenceStatusCards.FromTool("find_device",
+            "{\"status\":\"ok\",\"data\":{\"devices\":[" + device + "]}}", Observed));
         var row = Assert.Single(card.Rows);
         Assert.Equal(status, row.Status);
         Assert.Equal(tone, row.Tone);
+
+        // An answer's [[device:7]] names the same state as the card.
+        var reference = IntelligenceInlineReferences.FromSnapshot(card).Single(r => r.Key == "device:7");
+        Assert.Equal(status, reference.Status);
+        Assert.Equal(tone, reference.Tone);
+    }
+
+    [Theory]
+    [InlineData("ignored", "Ignored")]
+    [InlineData("maintenance", "Maintenance")]
+    public void Alert_rows_name_ignored_and_maintenance_device_states(string word, string status)
+    {
+        var card = Assert.Single(IntelligenceStatusCards.FromTool("active_alerts",
+            "{\"status\":\"ok\",\"data\":{\"devices\":[{\"device_id\":12,\"hostname\":\"ups-a.example.net\",\"device_status\":\"" + word
+            + "\",\"alerts\":[{\"rule\":\"On battery\",\"severity\":\"critical\",\"state\":\"active\"}]}],\"page\":{\"total\":1}}}", Observed));
+        Assert.Equal(status, Assert.Single(card.Rows).DeviceStatus);
+        Assert.Equal(status, IntelligenceInlineReferences.FromSnapshot(card).Single(r => r.Key == "device:12").Status);
     }
 
     [Fact]
@@ -92,18 +109,11 @@ public sealed class IntelligenceStatusCardTests
         var card = Assert.Single(IntelligenceStatusCards.FromTool("network_overview", """
             {"status":"ok","data":{"devices":{"total":10,"up":5,"down":1,"disabled":1,"ignored":2,"unknown":1},"alerts":null}}
             """, Observed));
+        const int total = 10;
 
         Assert.Equal(["Devices up", "Devices down", "Devices disabled", "Devices ignored", "Devices with no reported state"], card.Rows.Select(r => r.Name));
         Assert.Equal(["5", "1", "1", "2", "1"], card.Rows.Select(r => r.Detail));
-        Assert.Equal(10, card.Rows.Sum(r => int.Parse(r.Detail, System.Globalization.CultureInfo.InvariantCulture)));
-    }
-
-    [Fact]
-    public void An_inline_ignored_status_is_a_neutral_label()
-    {
-        var label = IntelligenceInlineMarkup.Resolve("[[status:ignored]]", [])!;
-        Assert.Equal("Ignored", label.Name);
-        Assert.Equal("unknown", label.Tone);
+        Assert.Equal(total, card.Rows.Sum(r => int.Parse(r.Detail, System.Globalization.CultureInfo.InvariantCulture)));
     }
 
     [Theory]

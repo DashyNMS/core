@@ -17,8 +17,9 @@ public static class IntelligenceInlineReferences
             if (row.DeviceId is { } id)
             {
                 var state = string.IsNullOrEmpty(row.DeviceStatus) ? row.Status : row.DeviceStatus;
-                // Alert severity is never a device's operational state.
-                if (state is not ("Up" or "Down" or "Disabled" or "Unknown")) state = "Unknown";
+                // Alert severity is never a device's operational state. Ignored and Maintenance are
+                // states MCP reports (mcp#121), so a [[device:ID]] names them as its card does.
+                if (state is not ("Up" or "Down" or "Disabled" or "Ignored" or "Maintenance" or "Unknown")) state = "Unknown";
                 var tone = state == "Up" ? "up" : state == "Down" ? "down" : "unknown";
                 yield return new("device:" + id, row.Name, state, tone, snapshot.ObservedAt, "Device status at lookup time") { Object = new("device", id) };
             }
