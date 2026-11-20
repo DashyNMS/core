@@ -1470,9 +1470,6 @@ public sealed class IntelligenceProviderSettings
     /// </summary>
     public bool? Added { get; set; }
 
-    /// <summary>Offered in the model picker. Off keeps the provider set up but out of the way.</summary>
-    public bool Enabled { get; set; } = true;
-
     /// <summary>Models left out of the model picker, by id. New models a provider adds appear until hidden.</summary>
     public List<string> HiddenModels { get; set; } = new();
 
@@ -1490,7 +1487,6 @@ public sealed class IntelligenceProviderSettings
         Model = Model,
         Effort = Effort,
         Added = Added,
-        Enabled = Enabled,
         HiddenModels = HiddenModels.ToList(),
         Connection = Connection,
     };
