@@ -290,6 +290,13 @@ public sealed class AppSettings
     public const string IntelligenceProviderChatGpt = "chatgpt";
     public const string IntelligenceProviderCodex = "codex";
     public const string IntelligenceProviderClaudeCode = "claude-code";
+    public const string IntelligenceProviderCopilot = "copilot";
+
+    /// <summary>ChatGPT answers through DashyNMS's own sign-in - see <see cref="IntelligenceProviderSettings.Connection"/>.</summary>
+    public const string IntelligenceConnectionSignIn = "signin";
+
+    /// <summary>ChatGPT answers through Codex on this computer, with Codex's own sign-in.</summary>
+    public const string IntelligenceConnectionCodex = "codex";
 
     /// <summary>
     /// Each agent provider's own choices, keyed by its id. ChatGPT keeps
@@ -1456,11 +1463,35 @@ public sealed class IntelligenceProviderSettings
     /// <summary>The reasoning level a new conversation starts with, or null for the model's default.</summary>
     public string? Effort { get; set; }
 
+    /// <summary>
+    /// Shown in Settings' provider list: added there by the user, or found
+    /// installed. ChatGPT is always listed.
+    /// </summary>
+    public bool Added { get; set; }
+
+    /// <summary>Offered in the model picker. Off keeps the provider set up but out of the way.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Models left out of the model picker, by id. New models a provider adds appear until hidden.</summary>
+    public List<string> HiddenModels { get; set; } = new();
+
+    /// <summary>
+    /// How a provider with more than one route connects - for ChatGPT,
+    /// <see cref="AppSettings.IntelligenceConnectionSignIn"/> or
+    /// <see cref="AppSettings.IntelligenceConnectionCodex"/>. One route at a
+    /// time; chats made through the other stay saved for when it's chosen again.
+    /// </summary>
+    public string? Connection { get; set; }
+
     public IntelligenceProviderSettings Clone() => new()
     {
         ExecutablePath = ExecutablePath,
         Model = Model,
         Effort = Effort,
+        Added = Added,
+        Enabled = Enabled,
+        HiddenModels = HiddenModels.ToList(),
+        Connection = Connection,
     };
 }
 

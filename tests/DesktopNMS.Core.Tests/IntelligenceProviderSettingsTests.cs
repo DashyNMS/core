@@ -54,4 +54,30 @@ public sealed class IntelligenceProviderSettingsTests
         Assert.Equal("session-1", copy.ProviderSession);
         Assert.Equal("medium", copy.Effort);
     }
+
+    [Fact]
+    public void A_provider_is_offered_until_turned_off_and_shows_every_model_until_one_is_hidden()
+    {
+        var chosen = JsonSerializer.Deserialize<IntelligenceProviderSettings>("""{"Model":"model-a"}""")!;
+
+        Assert.True(chosen.Enabled);
+        Assert.False(chosen.Added);
+        Assert.Empty(chosen.HiddenModels);
+        Assert.Null(chosen.Connection);
+    }
+
+    [Fact]
+    public void Clone_copies_hidden_models_and_the_connection()
+    {
+        var chosen = new IntelligenceProviderSettings { Added = true, Enabled = false, Connection = AppSettings.IntelligenceConnectionCodex };
+        chosen.HiddenModels.Add("model-b");
+
+        var copy = chosen.Clone();
+        copy.HiddenModels.Add("model-c");
+
+        Assert.True(copy.Added);
+        Assert.False(copy.Enabled);
+        Assert.Equal(AppSettings.IntelligenceConnectionCodex, copy.Connection);
+        Assert.Equal(["model-b"], chosen.HiddenModels);
+    }
 }
