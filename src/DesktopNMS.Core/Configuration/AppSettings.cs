@@ -267,6 +267,18 @@ public sealed class AppSettings
 
     public bool IntelligenceColourStatusIndicators { get; set; } = true;
 
+    /// <summary>
+    /// Use <see cref="IntelligencePersonality"/> in answers (#608 in DashyNMS/desktop).
+    /// Off keeps the text for later.
+    /// </summary>
+    public bool IntelligencePersonalityEnabled { get; set; }
+
+    /// <summary>
+    /// How the user would like Dashy to sound - tone and voice only, sent below
+    /// DashyNMS's own rules. Read it through <see cref="Intelligence.IntelligencePersonality.Effective"/>.
+    /// </summary>
+    public string IntelligencePersonality { get; set; } = string.Empty;
+
     /// <summary>A "what's sent" notice was accepted - possibly an older one; <see cref="IntelligenceConsentVersion"/> says which.</summary>
     public bool IntelligenceConsentGiven { get; set; }
 
@@ -502,6 +514,8 @@ public sealed class AppSettings
         IntelligenceWebSearchEnabled = IntelligenceWebSearchEnabled,
         IntelligenceReplyStyle = IntelligenceReplyStyle,
         IntelligenceColourStatusIndicators = IntelligenceColourStatusIndicators,
+        IntelligencePersonalityEnabled = IntelligencePersonalityEnabled,
+        IntelligencePersonality = IntelligencePersonality,
         IntelligenceConsentGiven = IntelligenceConsentGiven,
         IntelligenceConsentVersion = IntelligenceConsentVersion,
         IntelligenceModel = IntelligenceModel,

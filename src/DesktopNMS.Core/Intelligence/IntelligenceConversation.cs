@@ -101,8 +101,8 @@ public sealed class IntelligenceConversation
     }
 
     /// <summary>What the model is told for one answer - see <see cref="IntelligenceInstructions"/>.</summary>
-    internal static string BuildInstructions(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight = null, bool webSearchEnabled = false)
-        => IntelligenceInstructions.Build(detail, spotlight, webSearchEnabled);
+    internal static string BuildInstructions(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight = null, bool webSearchEnabled = false, string? personality = null)
+        => IntelligenceInstructions.Build(detail, spotlight, webSearchEnabled, personality);
 
     /// <summary>
     /// Answers one question. <paramref name="accessToken"/> is asked for
@@ -113,9 +113,10 @@ public sealed class IntelligenceConversation
     /// checked on this connection, or null for the whole network. The model is
     /// told their kinds and IDs - never their names - and to keep its lookups there.
     /// </param>
-    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, IReadOnlyCollection<IntelligenceObjectReference>? spotlight = null, bool webSearchEnabled = false, string? detail = null)
+    /// <param name="personality">How the user would like answers to sound - see <see cref="IntelligencePersonality"/>.</param>
+    public async Task AskAsync(string question, string model, Func<CancellationToken, Task<string>> accessToken, IIntelligenceListener listener, CancellationToken cancellationToken, IReadOnlyCollection<IntelligenceObjectReference>? spotlight = null, bool webSearchEnabled = false, string? detail = null, string? personality = null)
     {
-        var instructions = BuildInstructions(detail, spotlight, webSearchEnabled);
+        var instructions = BuildInstructions(detail, spotlight, webSearchEnabled, personality);
 
         var tools = await _tools.GetToolsAsync(cancellationToken).ConfigureAwait(false);
         var toolDefinitions = BuildTools(tools);

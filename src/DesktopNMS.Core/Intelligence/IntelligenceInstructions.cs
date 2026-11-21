@@ -6,8 +6,8 @@ namespace DesktopNMS.Core.Intelligence;
 /// <summary>
 /// The model's instructions (#324 in DashyNMS/desktop), kept as embedded text
 /// in Instructions/*.md so they read as a document and can be reviewed as one.
-/// Each answer gets the base block, its detail level's block, and the Spotlight
-/// and web search blocks only when they apply - every line is sent with every
+/// Each answer gets the base block, its detail level's block, and the
+/// personality, Spotlight and web search blocks only when they apply - every line is sent with every
 /// round of every question, so nothing is sent that doesn't bear on it.
 /// </summary>
 /// <remarks>
@@ -27,6 +27,13 @@ public static class IntelligenceInstructions
     /// <param name="spotlight">Objects already checked on this connection; described by kind and ID only, never by name.</param>
     /// <param name="webSearchEnabled">Whether the route offers web search for this question.</param>
     public static string Build(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight, bool webSearchEnabled)
+        => Build(detail, spotlight, webSearchEnabled, personality: null);
+
+    /// <param name="personality">
+    /// The user's description of how to sound, from <see cref="IntelligencePersonality.Effective"/>,
+    /// or null. Cleaned again here and placed below the rules, labelled as the user's.
+    /// </param>
+    public static string Build(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight, bool webSearchEnabled, string? personality)
     {
         var blocks = new List<string>
         {
@@ -35,6 +42,11 @@ public static class IntelligenceInstructions
                 .Replace("{max_rounds}", IntelligenceConversation.MaxToolRounds.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal),
             Block(IntelligenceDetail.Normalize(detail)),
         };
+        if (IntelligencePersonality.Clean(personality) is { } voice)
+        {
+            blocks.Add(Block("personality").Replace("{personality}", voice, StringComparison.Ordinal));
+        }
+
         if (Scope(spotlight) is { } scope)
         {
             blocks.Add(Block("spotlight").Replace("{scope}", scope, StringComparison.Ordinal));
