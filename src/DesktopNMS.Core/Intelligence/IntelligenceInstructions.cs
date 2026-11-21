@@ -6,11 +6,15 @@ namespace DesktopNMS.Core.Intelligence;
 /// <summary>
 /// The model's instructions (#324 in DashyNMS/desktop), kept as embedded text
 /// in Instructions/*.md so they read as a document and can be reviewed as one.
-/// Each answer gets the base block, its detail level's block, and the Spotlight
-/// and web search blocks only when they apply - every line is sent with every
+/// Each answer gets the base block, its detail level's block, and the
+/// personality, Spotlight and web search blocks only when they apply - every line is sent with every
 /// round of every question, so nothing is sent that doesn't bear on it.
 /// </summary>
-internal static class IntelligenceInstructions
+/// <remarks>
+/// Public so every route gives the model the same instructions (#97): an
+/// agent provider in Desktop receives exactly what the ChatGPT route sends.
+/// </remarks>
+public static class IntelligenceInstructions
 {
     private const string Prefix = "DesktopNMS.Core.Intelligence.Instructions.";
 
@@ -19,7 +23,17 @@ internal static class IntelligenceInstructions
     /// <summary>The most Spotlight objects described: as many as desktop lets a chat hold.</summary>
     internal const int MaxSpotlightObjects = 32;
 
+    /// <param name="detail">The detail level (<see cref="IntelligenceDetail"/>); older reply styles are mapped.</param>
+    /// <param name="spotlight">Objects already checked on this connection; described by kind and ID only, never by name.</param>
+    /// <param name="webSearchEnabled">Whether the route offers web search for this question.</param>
     public static string Build(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight, bool webSearchEnabled)
+        => Build(detail, spotlight, webSearchEnabled, personality: null);
+
+    /// <param name="personality">
+    /// The user's description of how to sound, from <see cref="IntelligencePersonality.Effective"/>,
+    /// or null. Cleaned again here and placed below the rules, labelled as the user's.
+    /// </param>
+    public static string Build(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight, bool webSearchEnabled, string? personality)
     {
         var blocks = new List<string>
         {
@@ -28,12 +42,20 @@ internal static class IntelligenceInstructions
                 .Replace("{max_rounds}", IntelligenceConversation.MaxToolRounds.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal),
             Block(IntelligenceDetail.Normalize(detail)),
         };
+
         if (Scope(spotlight) is { } scope)
         {
             blocks.Add(Block("spotlight").Replace("{scope}", scope, StringComparison.Ordinal));
         }
 
         blocks.Add(Block(webSearchEnabled ? "web-search-on" : "web-search-off"));
+
+        // Last, so every rule comes before the user's text and the block can say so.
+        if (IntelligencePersonality.Clean(personality) is { } voice)
+        {
+            blocks.Add(Block("personality").Replace("{personality}", voice, StringComparison.Ordinal));
+        }
+
         return string.Join("\n\n", blocks);
     }
 

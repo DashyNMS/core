@@ -13,6 +13,21 @@ public sealed class SavedIntelligenceChatTests : IDisposable
     private static byte[] Transform(byte[] data) => data.Select(value => (byte)(value ^ 0x5A)).ToArray();
 
     [Fact]
+    public void A_handoff_entry_survives_reopening()
+    {
+        var store = Store();
+        var chat = new SavedIntelligenceChat { Title = "Moved chat" };
+        chat.Messages.Add(new() { IsUser = true, Text = "How is the core?" });
+        chat.Messages.Add(new() { Handoff = new("claude-code", "Claude Opus 5.5", "chatgpt", "GPT-6.2-Astra") });
+        store.Save("account-a\nhttps://nms.example/", chat);
+
+        var restored = Store().Load("account-a\nhttps://nms.example/").Chats.Single();
+
+        Assert.Null(restored.Messages[0].Handoff);
+        Assert.Equal(new IntelligenceHandoff("claude-code", "Claude Opus 5.5", "chatgpt", "GPT-6.2-Astra"), restored.Messages[1].Handoff);
+    }
+
+    [Fact]
     public void Reopening_restores_chats_selection_model_context_draft_graphs_and_outfit()
     {
         var store = Store();

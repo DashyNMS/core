@@ -137,6 +137,18 @@ public sealed class IntelligenceWebSearchTests
         Assert.Contains(handler.Bodies[0]["tools"]!.AsArray(), tool => tool?["type"]?.GetValue<string>() == "namespace");
     }
 
+    [Fact]
+    public async Task A_personality_goes_in_the_request_instructions_after_every_rule()
+    {
+        var handler = new ScriptedHandler(Stream("""{"type":"response.output_text.delta","delta":"Ok."}""", """{"type":"response.completed"}"""));
+        var conversation = new IntelligenceConversation(new ResponsesClient(new HttpClient(handler)), new NetworkTools());
+
+        await conversation.AskAsync("Anything down?", "test-model", Token, new Listener(), CancellationToken.None, personality: "Be blunt.");
+
+        var instructions = handler.Bodies[0]["instructions"]!.ToString();
+        Assert.EndsWith("<personality>\nBe blunt.\n</personality>", instructions);
+    }
+
     [Theory]
     [InlineData(IntelligenceDetail.Brief)]
     [InlineData(IntelligenceDetail.Balanced)]

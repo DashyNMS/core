@@ -267,6 +267,18 @@ public sealed class AppSettings
 
     public bool IntelligenceColourStatusIndicators { get; set; } = true;
 
+    /// <summary>
+    /// Use <see cref="IntelligencePersonality"/> in answers (#608 in DashyNMS/desktop).
+    /// Off keeps the text for later.
+    /// </summary>
+    public bool IntelligencePersonalityEnabled { get; set; }
+
+    /// <summary>
+    /// How the user would like Dashy to sound - tone and voice only, sent below
+    /// DashyNMS's own rules. Read it through <see cref="Intelligence.IntelligencePersonality.Effective"/>.
+    /// </summary>
+    public string IntelligencePersonality { get; set; } = string.Empty;
+
     /// <summary>A "what's sent" notice was accepted - possibly an older one; <see cref="IntelligenceConsentVersion"/> says which.</summary>
     public bool IntelligenceConsentGiven { get; set; }
 
@@ -277,8 +289,34 @@ public sealed class AppSettings
     /// </summary>
     public int IntelligenceConsentVersion { get; set; }
 
-    /// <summary>The model a new conversation starts with (its slug); the first listed when unset or no longer offered.</summary>
+    /// <summary>The ChatGPT model a new conversation starts with (its slug); the first listed when unset or no longer offered.</summary>
     public string? IntelligenceModel { get; set; }
+
+    /// <summary>
+    /// The provider a new conversation starts with: <see cref="IntelligenceProviderChatGpt"/>,
+    /// <see cref="IntelligenceProviderCodex"/>, <see cref="IntelligenceProviderClaudeCode"/>,
+    /// <see cref="IntelligenceProviderCopilot"/> or <see cref="IntelligenceProviderGemini"/>
+    /// (#97). Each saved chat keeps its own, so changing this never moves an existing conversation.
+    /// </summary>
+    public string IntelligenceProvider { get; set; } = IntelligenceProviderChatGpt;
+
+    public const string IntelligenceProviderChatGpt = "chatgpt";
+    public const string IntelligenceProviderCodex = "codex";
+    public const string IntelligenceProviderClaudeCode = "claude-code";
+    public const string IntelligenceProviderCopilot = "copilot";
+    public const string IntelligenceProviderGemini = "gemini";
+
+    /// <summary>ChatGPT answers through DashyNMS's own sign-in - see <see cref="IntelligenceProviderSettings.Connection"/>.</summary>
+    public const string IntelligenceConnectionSignIn = "signin";
+
+    /// <summary>ChatGPT answers through Codex on this computer, with Codex's own sign-in.</summary>
+    public const string IntelligenceConnectionCodex = "codex";
+
+    /// <summary>
+    /// Each agent provider's own choices, keyed by its id. ChatGPT keeps
+    /// <see cref="IntelligenceModel"/>, so settings saved before providers existed carry on unchanged.
+    /// </summary>
+    public Dictionary<string, IntelligenceProviderSettings> IntelligenceProviders { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// How much config text the network tools return - the MCP server's
@@ -477,9 +515,13 @@ public sealed class AppSettings
         IntelligenceWebSearchEnabled = IntelligenceWebSearchEnabled,
         IntelligenceReplyStyle = IntelligenceReplyStyle,
         IntelligenceColourStatusIndicators = IntelligenceColourStatusIndicators,
+        IntelligencePersonalityEnabled = IntelligencePersonalityEnabled,
+        IntelligencePersonality = IntelligencePersonality,
         IntelligenceConsentGiven = IntelligenceConsentGiven,
         IntelligenceConsentVersion = IntelligenceConsentVersion,
         IntelligenceModel = IntelligenceModel,
+        IntelligenceProvider = IntelligenceProvider,
+        IntelligenceProviders = IntelligenceProviders.ToDictionary(kv => kv.Key, kv => kv.Value.Clone(), StringComparer.Ordinal),
         IntelligenceConfigText = IntelligenceConfigText,
         RecentlyViewedDeviceCount = RecentlyViewedDeviceCount,
         PinnedDevices = PinnedDevices.Select(d => d.Clone()).ToList(),
@@ -510,6 +552,13 @@ public sealed class AppSettings
         if (TimeoutSeconds > 300) TimeoutSeconds = 300;
         if (PollIntervalSeconds < 15) PollIntervalSeconds = 15;
         if (PollIntervalSeconds > 3600) PollIntervalSeconds = 3600;
+
+        // A hand-edited or damaged file can hold nulls here; Clone and the providers page assume none.
+        IntelligenceProvider = string.IsNullOrEmpty(IntelligenceProvider) ? IntelligenceProviderChatGpt : IntelligenceProvider;
+        IntelligencePersonality ??= string.Empty;
+        IntelligenceProviders = (IntelligenceProviders ?? new())
+            .Where(kv => kv.Value is not null)
+            .ToDictionary(kv => kv.Key, kv => { kv.Value.HiddenModels ??= new(); return kv.Value; }, StringComparer.Ordinal);
 
         Notifications ??= new NotificationSettings();
         Filter ??= new AlertFilterSettings();
@@ -1413,6 +1462,51 @@ public sealed class NotificationSettings
 }
 
 /// <summary>The filter chips the user last had selected.</summary>
+/// <summary>
+/// One agent provider's choices in Settings › Intelligence (#97). The agent
+/// keeps its own sign-in and configuration; DashyNMS stores only where to find
+/// it and what a new conversation starts with.
+/// </summary>
+public sealed class IntelligenceProviderSettings
+{
+    /// <summary>The agent's executable as the user chose it, or null to look for an installed one.</summary>
+    public string? ExecutablePath { get; set; }
+
+    /// <summary>The model a new conversation starts with, or null for the agent's own default.</summary>
+    public string? Model { get; set; }
+
+    /// <summary>The reasoning level a new conversation starts with, or null for the model's default.</summary>
+    public string? Effort { get; set; }
+
+    /// <summary>
+    /// Whether Settings lists the provider: true once added, false once
+    /// removed - then it stays off the list even when installed - and null
+    /// until either, when it's listed if it's found installed. ChatGPT is always listed.
+    /// </summary>
+    public bool? Added { get; set; }
+
+    /// <summary>Models left out of the model picker, by id. New models a provider adds appear until hidden.</summary>
+    public List<string> HiddenModels { get; set; } = new();
+
+    /// <summary>
+    /// How a provider with more than one route connects - for ChatGPT,
+    /// <see cref="AppSettings.IntelligenceConnectionSignIn"/> or
+    /// <see cref="AppSettings.IntelligenceConnectionCodex"/>. One route at a
+    /// time; chats made through the other stay saved for when it's chosen again.
+    /// </summary>
+    public string? Connection { get; set; }
+
+    public IntelligenceProviderSettings Clone() => new()
+    {
+        ExecutablePath = ExecutablePath,
+        Model = Model,
+        Effort = Effort,
+        Added = Added,
+        HiddenModels = HiddenModels.ToList(),
+        Connection = Connection,
+    };
+}
+
 /// <summary>
 /// Configuration for the Unimus config-backup integration (issue #115) - a
 /// second, independent API this app talks to directly (its own URL, its own
