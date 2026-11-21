@@ -11,7 +11,7 @@ public static class IntelligenceConsent
 {
     /// <summary>
     /// 1: what's sent and config backups. 2: adds web search and its search
-    /// providers. 3: adds Codex and Claude Code, which receive the same questions and tool results (#97).
+    /// providers. 3: adds the agent providers - Codex, Claude Code, GitHub Copilot and Gemini - which receive the same questions and tool results (#97).
     /// </summary>
     public const int CurrentVersion = 3;
 

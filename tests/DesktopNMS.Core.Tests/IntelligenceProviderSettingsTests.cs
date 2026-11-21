@@ -78,4 +78,21 @@ public sealed class IntelligenceProviderSettingsTests
         Assert.Equal(AppSettings.IntelligenceConnectionCodex, copy.Connection);
         Assert.Equal(["model-b"], chosen.HiddenModels);
     }
+
+    [Fact]
+    public void Nulls_in_a_damaged_settings_file_are_repaired()
+    {
+        var settings = JsonSerializer.Deserialize<AppSettings>("""
+            {"IntelligenceProvider":null,"IntelligencePersonality":null,
+             "IntelligenceProviders":{"codex":null,"claude-code":{"HiddenModels":null}}}
+            """)!;
+
+        settings.Normalise();
+        var copy = settings.Clone();
+
+        Assert.Equal(AppSettings.IntelligenceProviderChatGpt, copy.IntelligenceProvider);
+        Assert.Equal(string.Empty, copy.IntelligencePersonality);
+        Assert.Equal(["claude-code"], copy.IntelligenceProviders.Keys);
+        Assert.Empty(copy.IntelligenceProviders["claude-code"].HiddenModels);
+    }
 }

@@ -294,7 +294,8 @@ public sealed class AppSettings
 
     /// <summary>
     /// The provider a new conversation starts with: <see cref="IntelligenceProviderChatGpt"/>,
-    /// <see cref="IntelligenceProviderCodex"/> or <see cref="IntelligenceProviderClaudeCode"/>
+    /// <see cref="IntelligenceProviderCodex"/>, <see cref="IntelligenceProviderClaudeCode"/>,
+    /// <see cref="IntelligenceProviderCopilot"/> or <see cref="IntelligenceProviderGemini"/>
     /// (#97). Each saved chat keeps its own, so changing this never moves an existing conversation.
     /// </summary>
     public string IntelligenceProvider { get; set; } = IntelligenceProviderChatGpt;
@@ -551,6 +552,13 @@ public sealed class AppSettings
         if (TimeoutSeconds > 300) TimeoutSeconds = 300;
         if (PollIntervalSeconds < 15) PollIntervalSeconds = 15;
         if (PollIntervalSeconds > 3600) PollIntervalSeconds = 3600;
+
+        // A hand-edited or damaged file can hold nulls here; Clone and the providers page assume none.
+        IntelligenceProvider = string.IsNullOrEmpty(IntelligenceProvider) ? IntelligenceProviderChatGpt : IntelligenceProvider;
+        IntelligencePersonality ??= string.Empty;
+        IntelligenceProviders = (IntelligenceProviders ?? new())
+            .Where(kv => kv.Value is not null)
+            .ToDictionary(kv => kv.Key, kv => { kv.Value.HiddenModels ??= new(); return kv.Value; }, StringComparer.Ordinal);
 
         Notifications ??= new NotificationSettings();
         Filter ??= new AlertFilterSettings();
@@ -1455,14 +1463,6 @@ public sealed class NotificationSettings
 
 /// <summary>The filter chips the user last had selected.</summary>
 /// <summary>
-/// Configuration for the Unimus config-backup integration (issue #115) - a
-/// second, independent API this app talks to directly (its own URL, its own
-/// token, its own SSL trust setting) rather than through LibreNMS, even
-/// though LibreNMS ships its own server-side Unimus client
-/// (<c>app/ApiClients/Unimus.php</c>) - that integration lives entirely in
-/// LibreNMS's web UI and isn't reachable via its versioned API.
-/// </summary>
-/// <summary>
 /// One agent provider's choices in Settings › Intelligence (#97). The agent
 /// keeps its own sign-in and configuration; DashyNMS stores only where to find
 /// it and what a new conversation starts with.
@@ -1507,6 +1507,14 @@ public sealed class IntelligenceProviderSettings
     };
 }
 
+/// <summary>
+/// Configuration for the Unimus config-backup integration (issue #115) - a
+/// second, independent API this app talks to directly (its own URL, its own
+/// token, its own SSL trust setting) rather than through LibreNMS, even
+/// though LibreNMS ships its own server-side Unimus client
+/// (<c>app/ApiClients/Unimus.php</c>) - that integration lives entirely in
+/// LibreNMS's web UI and isn't reachable via its versioned API.
+/// </summary>
 public sealed class UnimusSettings
 {
     public bool Enabled { get; set; }

@@ -42,10 +42,6 @@ public static class IntelligenceInstructions
                 .Replace("{max_rounds}", IntelligenceConversation.MaxToolRounds.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal),
             Block(IntelligenceDetail.Normalize(detail)),
         };
-        if (IntelligencePersonality.Clean(personality) is { } voice)
-        {
-            blocks.Add(Block("personality").Replace("{personality}", voice, StringComparison.Ordinal));
-        }
 
         if (Scope(spotlight) is { } scope)
         {
@@ -53,6 +49,13 @@ public static class IntelligenceInstructions
         }
 
         blocks.Add(Block(webSearchEnabled ? "web-search-on" : "web-search-off"));
+
+        // Last, so every rule comes before the user's text and the block can say so.
+        if (IntelligencePersonality.Clean(personality) is { } voice)
+        {
+            blocks.Add(Block("personality").Replace("{personality}", voice, StringComparison.Ordinal));
+        }
+
         return string.Join("\n\n", blocks);
     }
 
