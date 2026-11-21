@@ -55,7 +55,21 @@ public sealed class SavedIntelligenceMessage
     public string? SubmittedQuestion { get; set; }
     public string? FailureText { get; set; }
     public List<IntelligenceImage> Images { get; set; } = new();
+
+    /// <summary>
+    /// Set when this entry marks the chat moving to another provider rather
+    /// than a question or an answer: the transcript shows it as a divider, so
+    /// a reader can tell which provider answered what.
+    /// </summary>
+    public IntelligenceHandoff? Handoff { get; set; }
 }
+
+/// <summary>
+/// A chat changing hands: the provider ids (see
+/// <see cref="Configuration.AppSettings.IntelligenceProvider"/>) and the model
+/// names as the picker showed them, from and to.
+/// </summary>
+public sealed record IntelligenceHandoff(string FromProvider, string FromModel, string ToProvider, string ToModel);
 
 public sealed record SavedChatSpotlight(int Kind, int Id, string Name)
 {
