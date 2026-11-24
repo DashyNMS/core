@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace DesktopNMS.Core.Updates;
 
 /// <summary>
-/// Reads the latest release of a fixed GitHub repository via the public,
+/// Reads the releases of a fixed GitHub repository via the public,
 /// unauthenticated REST API. Read-only: this never downloads or runs
 /// anything, it only reports what the repository's Releases page says.
 /// </summary>
@@ -35,16 +35,22 @@ public sealed class GitHubReleaseService : IGitHubReleaseService, IDisposable
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
     }
 
-    public async Task<GitHubRelease?> GetLatestReleaseAsync(CancellationToken cancellationToken = default)
+    public Task<GitHubRelease?> GetLatestReleaseAsync(CancellationToken cancellationToken = default)
+        => GetReleaseAsync("latest", cancellationToken);
+
+    public Task<GitHubRelease?> GetReleaseByTagAsync(string tag, CancellationToken cancellationToken = default)
+        => GetReleaseAsync("tags/" + Uri.EscapeDataString(tag), cancellationToken);
+
+    private async Task<GitHubRelease?> GetReleaseAsync(string which, CancellationToken cancellationToken)
     {
         try
         {
-            var url = $"repos/{Owner}/{Repo}/releases/latest";
+            var url = $"repos/{Owner}/{Repo}/releases/{which}";
             using var response = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
-                // 404 just means the repo has no releases yet - not worth logging as a warning.
+                // 404 just means the repo has no such release yet - not worth logging as a warning.
                 _logger.LogDebug("GitHub releases check returned HTTP {Status} for {Url}", (int)response.StatusCode, url);
                 return null;
             }
@@ -59,7 +65,7 @@ public sealed class GitHubReleaseService : IGitHubReleaseService, IDisposable
         {
             // Offline, DNS down, GitHub unreachable, malformed response, etc:
             // an update check failing must never be treated as an app error.
-            _logger.LogDebug(ex, "Could not check GitHub for the latest release");
+            _logger.LogDebug(ex, "Could not read a release from GitHub");
             return null;
         }
     }

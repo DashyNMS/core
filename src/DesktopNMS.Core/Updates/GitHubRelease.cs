@@ -12,6 +12,15 @@ public sealed class GitHubRelease
     [JsonPropertyName("tag_name")]
     public string? TagName { get; set; }
 
+    /// <summary>
+    /// The version the release's files are, e.g. "v0.2.0". The tag, except for
+    /// the edge release, whose tag never changes and whose title is the
+    /// version. A title that isn't an edge version leaves nothing to offer.
+    /// </summary>
+    [JsonIgnore]
+    public string? Version => TagName != UpdateChannels.EdgeTag ? TagName
+        : ReleaseVersion.ChannelOf(Name) == UpdateChannel.Edge ? "v" + Name!.Trim().TrimStart('v') : null;
+
     /// <summary>The release's display title, e.g. "0.2.0 - Health tab".</summary>
     [JsonPropertyName("name")]
     public string? Name { get; set; }

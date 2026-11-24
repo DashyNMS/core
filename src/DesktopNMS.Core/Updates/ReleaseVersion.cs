@@ -19,14 +19,31 @@ public static class ReleaseVersion
     public static bool IsNewer(string? candidateTag, string? currentVersion) =>
         Compare(candidateTag, currentVersion) > 0;
 
+    /// <summary>True if <paramref name="tag"/> holds a version that can be ranked.</summary>
+    public static bool IsValid(string? tag) => Parse(tag) is not null;
+
+    /// <summary>The channel a version belongs to; previews count as nightly, which replaced them, and anything else is stable.</summary>
+    public static UpdateChannel ChannelOf(string? version) => Parse(version)?.Stage switch
+    {
+        Stage.Edge => UpdateChannel.Edge,
+        Stage.Preview or Stage.Nightly => UpdateChannel.Nightly,
+        _ => UpdateChannel.Stable,
+    };
+
+    /// <summary>True if both tags are builds of one version, such as "2.0.0-edge.4" and "v2.0.0".</summary>
+    public static bool SameCore(string? a, string? b) =>
+        Parse(a) is { } parsedA && Parse(b) is { } parsedB && parsedA.Core == parsedB.Core;
+
     /// <summary>
     /// Ranks two release tags against each other so the best one can be
-    /// picked out of a list mixing stable and preview builds (e.g. "1.0.0"
-    /// vs "1.0.0-preview.2"). Compares the numeric core first; for the same
-    /// core, a stable tag always outranks a preview tag, and between two
-    /// previews the higher preview sequence number wins. Returns positive if
-    /// <paramref name="a"/> ranks higher than <paramref name="b"/>, negative
-    /// if lower, and zero if either tag cannot be parsed.
+    /// picked out of a list mixing stable releases and builds of them (e.g.
+    /// "1.0.0" vs "1.0.0-nightly.2"). Compares the numeric core first; for the
+    /// same core, edge ranks below preview, preview below nightly and nightly
+    /// below stable, and between two of a kind the higher number wins. Not
+    /// SemVer's alphabetical order, which would rank nightly below the previews
+    /// it replaced. Returns positive if <paramref name="a"/> ranks higher than
+    /// <paramref name="b"/>, negative if lower, and zero if either tag cannot
+    /// be parsed.
     /// </summary>
     public static int Compare(string? a, string? b)
     {
@@ -44,21 +61,26 @@ public static class ReleaseVersion
             return coreCompare;
         }
 
-        if (parsedA.Value.IsPreview != parsedB.Value.IsPreview)
-        {
-            return parsedA.Value.IsPreview ? -1 : 1;
-        }
+        var stageCompare = parsedA.Value.Stage.CompareTo(parsedB.Value.Stage);
+        return stageCompare != 0 ? stageCompare : parsedA.Value.Sequence.CompareTo(parsedB.Value.Sequence);
+    }
 
-        return parsedA.Value.PreviewSequence.CompareTo(parsedB.Value.PreviewSequence);
+    private enum Stage
+    {
+        Edge,
+        Preview,
+        Nightly,
+        Stable,
     }
 
     // Matches a numeric core (1-4 dotted segments) with an optional
-    // "-preview.N" (or "-preview1", "-preview") suffix - the tag shape
-    // GitHubActions/the release process is expected to produce for a preview
-    // build, e.g. "v1.0.0-preview.2".
-    private static readonly Regex TagPattern = new(@"(?<core>\d+(\.\d+){1,3})(-preview\.?(?<seq>\d+)?)?", RegexOptions.IgnoreCase);
+    // "-nightly.N", "-edge.N" or "-preview.N" suffix (the dot and the number
+    // are optional too) - the tag shapes the builds produce.
+    private static readonly Regex TagPattern = new(
+        @"(?<core>\d+(\.\d+){1,3})(-(?<stage>edge|nightly|preview)\.?(?<seq>\d+)?)?",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    private static (Version Core, bool IsPreview, int PreviewSequence)? Parse(string? tag)
+    private static (Version Core, Stage Stage, int Sequence)? Parse(string? tag)
     {
         if (tag is null)
         {
@@ -71,9 +93,13 @@ public static class ReleaseVersion
             return null;
         }
 
-        var isPreview = tag.Contains("-preview", StringComparison.OrdinalIgnoreCase);
-        var sequence = isPreview && int.TryParse(match.Groups["seq"].Value, out var n) ? n : 0;
-
-        return (core, isPreview, sequence);
+        var stage = match.Groups["stage"].Value.ToLowerInvariant() switch
+        {
+            "edge" => Stage.Edge,
+            "preview" => Stage.Preview,
+            "nightly" => Stage.Nightly,
+            _ => Stage.Stable,
+        };
+        return (core, stage, int.TryParse(match.Groups["seq"].Value, out var sequence) ? sequence : 0);
     }
 }
