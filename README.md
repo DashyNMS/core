@@ -42,23 +42,26 @@ GitHub Packages needs a login even for public packages: a token with `read:packa
 
 **Versions**
 - **Releases**, for example `2.0.0`, follow semver. A breaking change to the public API, or to anything saved in settings, is a major version.
-- **Development builds**, `2.0.0-ci.N`, come from every merge to `main`, so an app can test unreleased Core.
+- **Edge packages**, `2.0.0-edge.N`, come from every commit to `main`, so an app can pin unreleased Core.
+- **Nightly packages**, `2.0.0-nightly.N`, come from `main` at 00:00 UTC when it has changed.
 
 The assembly and namespaces are still `DesktopNMS.Core`; renaming them is [#1](https://github.com/DashyNMS/core/issues/1).
 
-`AppSettings.DiagnosticsConsentVersion` records which Desktop diagnostics disclosure was explicitly accepted. It defaults to `0` for existing settings (launch-only scope) and survives cloning and persistence. The existing `DiagnosticsSharingPreference` values are unchanged. Desktop must require a new explicit choice before collecting broader usage/performance metrics and must treat unknown versions conservatively. Mobile and MCP need no behaviour changes; this Desktop metadata does not authorise collection in other clients. This is an additive API change in the next `2.0.0-ci.N` package.
+`AppSettings.DiagnosticsConsentVersion` records which Desktop diagnostics disclosure was explicitly accepted. It defaults to `0` for existing settings (launch-only scope) and survives cloning and persistence. The existing `DiagnosticsSharingPreference` values are unchanged. Desktop must require a new explicit choice before collecting broader usage/performance metrics and must treat unknown versions conservatively. Mobile and MCP need no behaviour changes; this Desktop metadata does not authorise collection in other clients. This is an additive API change in the next `2.0.0-edge.N` package.
 
-`AppSettings.PortsLayout` remembers whether Device Details' Ports tab shows a table or cards: `AppSettings.PortsLayoutTable` (`"Table"`, the default) or `AppSettings.PortsLayoutCards` (`"Cards"`). Settings files without it, and any other value, load as the table, and `Clone()` carries it. Desktop adds the choice under Settings > Devices; mobile and MCP need no changes. This is an additive API change in the next `2.0.0-ci.N` package.
+`AppSettings.UpdateChannel` (#104) is the updates an app is offered: `Stable` (the default), `Nightly` or `Edge`. Settings that had `IncludePreviewBuilds` on load as Nightly, and the old value is still saved for older apps. `UpdateChannels.FindAsync` finds a channel's newest release and `UpdateChannels.IsUpdate` decides whether to offer it; `GitHubRelease.Version` is the version to show and name files by, which for the edge release isn't its tag. Within one version, `ReleaseVersion` ranks edge below preview, preview below nightly and nightly below stable. Desktop adds the choice to Settings; mobile and MCP need no changes. This is an additive API change in the next `2.0.0-edge.N` package.
 
-`AppSettings.NetworkSearchMacFormat` (`Colon`, `Hyphen`, `Dotted` or `Bare`; read it through `NetworkSearchMacFormatValue`) and `AppSettings.NetworkSearchRecent` (newest first, at most `MaxNetworkSearchRecent`, added with `RememberNetworkSearch`) remember Network Search's MAC format and recent queries. Unknown formats load as `Colon`, and `Clone()` carries both. Recent queries name addresses on the user's network, so they stay local and are removed with the settings file on sign-out. Desktop uses them on its Network Search page, and mobile can do the same when it adds the page. This is an additive API change in the next `2.0.0-ci.N` package.
+`AppSettings.PortsLayout` remembers whether Device Details' Ports tab shows a table or cards: `AppSettings.PortsLayoutTable` (`"Table"`, the default) or `AppSettings.PortsLayoutCards` (`"Cards"`). Settings files without it, and any other value, load as the table, and `Clone()` carries it. Desktop adds the choice under Settings > Devices; mobile and MCP need no changes. This is an additive API change in the next `2.0.0-edge.N` package.
+
+`AppSettings.NetworkSearchMacFormat` (`Colon`, `Hyphen`, `Dotted` or `Bare`; read it through `NetworkSearchMacFormatValue`) and `AppSettings.NetworkSearchRecent` (newest first, at most `MaxNetworkSearchRecent`, added with `RememberNetworkSearch`) remember Network Search's MAC format and recent queries. Unknown formats load as `Colon`, and `Clone()` carries both. Recent queries name addresses on the user's network, so they stay local and are removed with the settings file on sign-out. Desktop uses them on its Network Search page, and mobile can do the same when it adds the page. This is an additive API change in the next `2.0.0-edge.N` package.
 
 `Search.NetworkSearch` is the shared Network Search lookup (#91), and it replicates LibreNMS 26.11's Network Search page. It finds an endpoint by address, network, MAC or name, then reports where the endpoint sits: its switch ports with uplinks marked, the router interfaces that resolved it, its subnet and gateways, and any conflicts. It records what each source said (`SourceCoverage`), so a source that was denied, unavailable or failed is never shown as "not found". Results are paged and requests are bounded. `NetworkSearchQuery` reads queries, `MacAddresses` reads and writes MACs, and `NetworkSearchExport` writes CSV. Desktop and mobile build their pages on it; MCP needs no changes.
 
-`LibreNmsTransport.RequestObserver` is an optional host-owned callback for bounded request performance measurements. It is null by default and Core uploads nothing. Each public transport call reports once after retries/failover and response parsing; collection deserialisation does not double-count. Measurements contain only fixed operation/outcome/HTTP-class enums and elapsed time, with no URL, identifiers, headers, payload or exception text. Observer exceptions cannot alter request results. Desktop must attach it only under expanded metrics consent, keep callbacks fast, and discard completions from an earlier consent generation. Mobile/MCP need no changes and remain unobserved unless they explicitly opt in. This is an additive API in the next `2.0.0-ci.N` package.
+`LibreNmsTransport.RequestObserver` is an optional host-owned callback for bounded request performance measurements. It is null by default and Core uploads nothing. Each public transport call reports once after retries/failover and response parsing; collection deserialisation does not double-count. Measurements contain only fixed operation/outcome/HTTP-class enums and elapsed time, with no URL, identifiers, headers, payload or exception text. Observer exceptions cannot alter request results. Desktop must attach it only under expanded metrics consent, keep callbacks fast, and discard completions from an earlier consent generation. Mobile/MCP need no changes and remain unobserved unless they explicitly opt in. This is an additive API in the next `2.0.0-edge.N` package.
 
-`RequestGate` on `LibreNmsTransport`, `UnimusApi` and `GraylogApi` is an optional host-owned limit on requests in flight (#99). Each HTTP attempt, retries included, calls `IRequestGate.EnterAsync` before its timeout starts, so waiting for a turn never becomes a timeout. It gives the turn back when the response has been read or the attempt has failed. LibreNMS's connection test isn't counted; the Unimus and Graylog ones are. Core doesn't bound the wait, so a host cancels callers it no longer wants queued. It's null by default and Core sets no limit itself. MCP sets one; Desktop and Mobile need no changes. This is an additive API in the next `2.0.0-ci.N` package.
+`RequestGate` on `LibreNmsTransport`, `UnimusApi` and `GraylogApi` is an optional host-owned limit on requests in flight (#99). Each HTTP attempt, retries included, calls `IRequestGate.EnterAsync` before its timeout starts, so waiting for a turn never becomes a timeout. It gives the turn back when the response has been read or the attempt has failed. LibreNMS's connection test isn't counted; the Unimus and Graylog ones are. Core doesn't bound the wait, so a host cancels callers it no longer wants queued. It's null by default and Core sets no limit itself. MCP sets one; Desktop and Mobile need no changes. This is an additive API in the next `2.0.0-edge.N` package.
 
-LibreNMS 26.10 polls alerts through `faults` (and probes `faults?state=-1`). Those GET requests are measured as `ApiOperation.Alerts`, the same as `alerts` on older servers, so alert polling can be compared across versions. Writes such as acknowledging a fault stay `ApiOperation.Other`. The probe runs once per connection on every server, so on servers before 26.10 its expected 404 is now one `Alerts` request with a `ClientError` outcome rather than an `Other` one; read a single client error per connection there as version detection, not failed polling. No enum value is added, so consumers' fixed dimension lists are unchanged; Desktop and Mobile only need to pin the next `2.0.0-ci.N` package to report 26.10 alert polling correctly.
+LibreNMS 26.10 polls alerts through `faults` (and probes `faults?state=-1`). Those GET requests are measured as `ApiOperation.Alerts`, the same as `alerts` on older servers, so alert polling can be compared across versions. Writes such as acknowledging a fault stay `ApiOperation.Other`. The probe runs once per connection on every server, so on servers before 26.10 its expected 404 is now one `Alerts` request with a `ClientError` outcome rather than an `Other` one; read a single client error per connection there as version detection, not failed polling. No enum value is added, so consumers' fixed dimension lists are unchanged; Desktop and Mobile only need to pin the next `2.0.0-edge.N` package to report 26.10 alert polling correctly.
 
 Sensor definition readers accept schemas 1 and 2. They prefer the separate v2 feed, falling back to v1 only when v2 returns 404. Existing `Resolve` and `ApplyAsync` calls remain supported. Schema 2 preserves fixed OID suffixes after an index, so neighbouring columns cannot match a rule accidentally. Consumers with device metadata should use `Resolve(sensor, os, device)` or `ApplyWithDevicesAsync` so hardware/version conditions can be evaluated. `ResolveDetailed` and `SensorStateResolution.Outcome` distinguish unavailable data, coverage gaps, unknown enum values and conflicts. `SensorMonitor` supplies cached device metadata automatically; Desktop and MCP need the updated Core package, with no vendor-specific matching code.
 
@@ -84,7 +87,7 @@ failure; the consumer owns rollback of its own edits. `ISettingsStore`, `Save`,
 Mobile adopts this acknowledgement for Intelligence settings so a failed disk
 write cannot be presented as a saved change. Desktop and MCP need no changes
 and may opt in when they need persistence acknowledgement. This is an additive
-API in the next `2.0.0-ci.N` package, with no settings migration.
+API in the next `2.0.0-edge.N` package, with no settings migration.
 
 ### Graph legend availability
 
@@ -106,8 +109,8 @@ have null values. Valid values retain their units, rounding and culture behaviou
 This is a non-breaking formatting correction in the existing 2.0 development
 stream: `GraphLegendEntry` and all method signatures, names, ordering, counts,
 SensorIds and SVG series identities are unchanged. No version bump or manual
-publication is needed. After review and merge, the existing main workflow tests
-and publishes `2.0.0-ci.N`; consumers should pin the exact resulting version and
+publication is needed. After review and merge, the edge build tests
+and publishes `2.0.0-edge.N`; consumers should pin the exact resulting version and
 verify its repository commit metadata.
 
 ### Intelligence status words
@@ -119,34 +122,12 @@ down tone. The network overview's Device status card adds "Devices ignored" and
 "Devices with no reported state" rows when MCP sends those counts, so its rows
 add up to the network. `[[status:ignored]]` renders as a neutral label. The
 model instruction blocks are unchanged. Desktop gets this by pinning the next
-`2.0.0-ci.N`. Mobile builds its own cards and needs no change; MCP isn't
+`2.0.0-edge.N`. Mobile builds its own cards and needs no change; MCP isn't
 affected. This is a non-breaking fix in the 2.0 development stream.
 
-## Build it
+## Development
 
-You need the .NET 9 and .NET 10 SDKs.
-
-```bash
-git clone https://github.com/DashyNMS/core.git
-cd core
-dotnet test DashyNMS.Core.sln
-```
-
-CI runs the tests on Windows, macOS and Linux. Mark a test that only holds on one platform with `[WindowsFact]` or `[NotWindowsFact]`.
-
-**Releasing:** push a tag such as `v2.0.0`. The release workflow tests, packs and publishes that version. Then raise `<Version>` in `Directory.Build.props` to the next version, so later development builds sort after the release.
-
-## Commits, pull requests and issues
-
-The same standard as every DashyNMS repository: `type(scope): what changes, in plain words`.
-- **Types:** `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
-- **Scopes:** `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`.
-- **The description:** lower-case start, no full stop, under about 72 characters.
-- **Issues:** issue titles use the same form, worded as the result the fix delivers.
-- **PRs:** one issue per PR, squash-merged, with `Closes #NN` in the description.
-- **Breaking changes:** add `!` after the type or scope.
-
-Every PR says what desktop, mobile and MCP need to do about it.
+Building, the edge, nightly and release builds, and the commit standard are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Report security problems privately: see [SECURITY.md](SECURITY.md).
 
 ## Help and feedback
 

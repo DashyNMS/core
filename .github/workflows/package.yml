@@ -1,0 +1,58 @@
+name: Package
+
+# Packs DashyNMS.Core and publishes it to GitHub Packages. Called by the edge,
+# nightly and release builds.
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      commit:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Publish the package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Pack
+        env:
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
+        run: >-
+          dotnet pack src/DesktopNMS.Core -c Release -o artifacts
+          -p:Version="$VERSION" -p:RepositoryCommit="$COMMIT" -p:ContinuousIntegrationBuild=true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: artifacts/*.nupkg
+
+      # No --skip-duplicate: an existing version must fail rather than be
+      # reported as published with bytes this run didn't produce.
+      - name: Publish to GitHub Packages
+        env:
+          PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          dotnet nuget push "artifacts/*.nupkg" --source https://nuget.pkg.github.com/DashyNMS/index.json --api-key "$PUSH_TOKEN"
+          echo "Published DashyNMS.Core $VERSION" >> "$GITHUB_STEP_SUMMARY"

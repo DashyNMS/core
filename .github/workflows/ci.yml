@@ -1,29 +1,58 @@
-name: Build and test
+name: CI
 
+# Every pull request. Edge, nightly and release builds call it too, so nothing
+# is published from a commit that hasn't passed. "CI result" is the required check.
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build and test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+  test:
+    name: Test (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          dotnet-version: |
-            9.0.x
-            10.0.x
+          persist-credentials: false
+
+      # The .NET 9 runtime as well, for the net9.0 tests.
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+          dotnet-version: 9.0.x
 
       - name: Test
-        run: dotnet test DashyNMS.Core.sln -c Release
+        run: dotnet test DashyNMS.Core.slnx -c Release
+
+  scripts:
+    name: Build scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the build scripts
+        run: python3 -B -m unittest discover -s scripts/tests -v
+
+  result:
+    name: CI result
+    if: always()
+    needs: [test, scripts]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job
+        env:
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: test "$FAILED" = false
