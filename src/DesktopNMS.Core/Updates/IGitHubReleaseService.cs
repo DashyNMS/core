@@ -17,11 +17,4 @@ public interface IGitHubReleaseService
     /// the request fails.
     /// </summary>
     Task<IReadOnlyList<GitHubRelease>> GetReleasesAsync(int count = 10, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// The published release with exactly this tag, or null if there isn't
-    /// one or the request failed. Never throws. A service that only lists
-    /// releases has none to give, so existing implementations keep working.
-    /// </summary>
-    Task<GitHubRelease?> GetReleaseByTagAsync(string tag, CancellationToken cancellationToken = default) => Task.FromResult<GitHubRelease?>(null);
 }

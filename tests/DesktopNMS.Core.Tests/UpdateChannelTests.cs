@@ -22,7 +22,6 @@ public sealed class UpdateChannelTests
     [InlineData("2.0.0", "2.0.0-nightly.99")]
     [InlineData("2.0.0", "2.0.0-edge.99")]
     [InlineData("2.1.0-edge.1", "2.0.0")]
-    [InlineData("1.0.0", UpdateChannels.EdgeTag)]
     public void Builds_rank_edge_preview_nightly_then_stable(string higher, string lower)
     {
         Assert.True(ReleaseVersion.Compare(higher, lower) > 0);
@@ -65,14 +64,26 @@ public sealed class UpdateChannelTests
         var service = new Releases
         {
             Latest = Release("v1.1.0"),
-            Recent = { Release("not-a-version"), Release("v2.0.0-preview.20", true), Release("v2.0.0-nightly.2", true), Release("v1.1.0"), Edge("2.0.0-edge.7") },
-            ByTag = Edge("2.0.0-edge.8"),
+            Recent =
+            {
+                Release("not-a-version"), Release("v2.0.0-edge.8", true), Release("v2.0.0-edge.7", true),
+                Release("v2.0.0-preview.20", true), Release("v2.0.0-nightly.2", true), Release("v1.1.0"),
+            },
         };
-        Assert.Equal("v1.1.0", (await UpdateChannels.FindAsync(service, UpdateChannel.Stable))!.Version);
-        Assert.Equal("v2.0.0-nightly.2", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.Version);
-        Assert.Equal("v2.0.0-edge.8", (await UpdateChannels.FindAsync(service, UpdateChannel.Edge))!.Version);
+        Assert.Equal("v1.1.0", (await UpdateChannels.FindAsync(service, UpdateChannel.Stable))!.TagName);
+        Assert.Equal("v2.0.0-nightly.2", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.TagName);
+        Assert.Equal("v2.0.0-edge.8", (await UpdateChannels.FindAsync(service, UpdateChannel.Edge))!.TagName);
         service.Latest = Release("v2.0.0");
-        Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(service, UpdateChannel.Edge))!.Version);
+        Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(service, UpdateChannel.Edge))!.TagName);
+    }
+
+    [Fact]
+    public async Task A_nightly_is_found_behind_a_busy_days_edge_builds()
+    {
+        var service = new Releases();
+        for (var build = 60; build > 0; build--) service.Recent.Add(Release($"v2.0.0-edge.{build}", true));
+        service.Recent.Add(Release("v2.0.0-nightly.5", true));
+        Assert.Equal("v2.0.0-nightly.5", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.TagName);
     }
 
     [Fact]
@@ -80,39 +91,20 @@ public sealed class UpdateChannelTests
     {
         var service = new Releases { Latest = Release("v2.0.0") };
         for (var build = 30; build > 20; build--) service.Recent.Add(Release($"v2.0.0-nightly.{build}", true));
-        Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.Version);
+        Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.TagName);
         service.Recent[0] = Release("v2.1.0-nightly.31", true);
-        Assert.Equal("v2.1.0-nightly.31", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.Version);
+        Assert.Equal("v2.1.0-nightly.31", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.TagName);
         // GitHub couldn't give one of the two.
         service.Latest = null;
-        Assert.Equal("v2.1.0-nightly.31", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.Version);
+        Assert.Equal("v2.1.0-nightly.31", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.TagName);
     }
 
     [Fact]
-    public async Task An_edge_release_that_cannot_be_read_still_leaves_the_stable_one()
+    public async Task Releases_that_cannot_be_read_still_leave_the_stable_one()
     {
-        Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(new Releases { Latest = Release("v2.0.0") }, UpdateChannel.Edge))!.Version);
-        Assert.Null(Edge("Edge build").Version);
-        Assert.Null(Edge("2.0.0-edge.8 - hotfix").Version);
-        Assert.Null(Edge("2.0.0").Version);
-        Assert.Null(await UpdateChannels.FindAsync(new Releases { ByTag = Edge("Edge build") }, UpdateChannel.Edge));
-    }
-
-    [Fact]
-    public void An_edge_package_has_its_builds_name_and_the_edge_tags_address()
-    {
-        var release = Edge("2.0.0-edge.8");
-        release.Assets.Add(new GitHubReleaseAsset
-        {
-            Name = "DashyNMS-2.0.0-edge.8-osx-arm64.dmg",
-            Size = 1,
-            Digest = "sha256:" + new string('a', 64),
-            BrowserDownloadUrl = UpdatePackage.DownloadPrefix + "v0.0.0-edge/DashyNMS-2.0.0-edge.8-osx-arm64.dmg",
-        });
-        Assert.NotNull(UpdatePackage.FindForRuntime(release, "osx-arm64"));
-        // Mid-replacement: the title has moved on and the file hasn't.
-        release.Name = "2.0.0-edge.9";
-        Assert.Null(UpdatePackage.FindForRuntime(release, "osx-arm64"));
+        Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(new Releases { Latest = Release("v2.0.0") }, UpdateChannel.Edge))!.TagName);
+        Assert.Null(await UpdateChannels.FindAsync(new Releases(), UpdateChannel.Edge));
+        Assert.Null(await UpdateChannels.FindAsync(new Releases { Latest = Release("v2.0.0", true) }, UpdateChannel.Stable));
     }
 
     [Theory]
@@ -150,20 +142,14 @@ public sealed class UpdateChannelTests
 
     private static GitHubRelease Release(string tag, bool prerelease = false) => new() { TagName = tag, Name = tag, Prerelease = prerelease };
 
-    private static GitHubRelease Edge(string title) => new() { TagName = UpdateChannels.EdgeTag, Name = title, Prerelease = true };
-
     private sealed class Releases : IGitHubReleaseService
     {
         public GitHubRelease? Latest { get; set; }
 
         public List<GitHubRelease> Recent { get; } = new();
 
-        public GitHubRelease? ByTag { get; init; }
-
         public Task<GitHubRelease?> GetLatestReleaseAsync(CancellationToken cancellationToken = default) => Task.FromResult(Latest);
 
-        public Task<IReadOnlyList<GitHubRelease>> GetReleasesAsync(int count = 10, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<GitHubRelease>>(Recent);
-
-        public Task<GitHubRelease?> GetReleaseByTagAsync(string tag, CancellationToken cancellationToken = default) => Task.FromResult(tag == UpdateChannels.EdgeTag ? ByTag : null);
+        public Task<IReadOnlyList<GitHubRelease>> GetReleasesAsync(int count = 10, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<GitHubRelease>>(Recent.Take(count).ToList());
     }
 }
