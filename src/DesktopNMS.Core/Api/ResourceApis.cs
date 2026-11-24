@@ -1112,9 +1112,16 @@ internal sealed class LogsApi : ILogsApi
     /// converted: LibreNMS hands it to the database as text. A purely numeric
     /// "to" would be taken as an entry ID, which this never is.
     /// </summary>
-    private static string UpTo(string log, int? deviceId, DateTime upTo, int limit) => string.Create(
-        CultureInfo.InvariantCulture,
-        $"logs/{log}{DeviceSegment(deviceId)}?limit={Math.Max(1, limit)}&sortorder=DESC&to={Uri.EscapeDataString(upTo.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture))}");
+    private static string UpTo(string log, int? deviceId, DateTime upTo, int limit)
+    {
+        // Rounding down would leave out the entry it came from.
+        var part = upTo.Ticks % TimeSpan.TicksPerSecond;
+        var second = part == 0 ? upTo : upTo.AddTicks(TimeSpan.TicksPerSecond - part);
+        var to = Uri.EscapeDataString(second.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"logs/{log}{DeviceSegment(deviceId)}?limit={Math.Max(1, limit)}&sortorder=DESC&to={to}");
+    }
 }
 
 /// <summary>Implementation of <see cref="IGraphsApi"/>.</summary>

@@ -52,6 +52,19 @@ public class LogsApiTests
     }
 
     [Theory]
+    [InlineData("2026-10-01 08:12:41.500")]
+    [InlineData("2026-10-01 08:12:42Z")]
+    public async Task A_time_up_to_is_rounded_up_to_a_second_and_never_shifted(string time)
+    {
+        var transport = new RecordingTransport();
+        var entry = JsonSerializer.Deserialize<EventLogEntry>($$"""{"event_id":901,"datetime":"{{time}}"}""", LibreNmsJson.Options)!;
+
+        await new LogsApi(transport).ListEventLogUpToAsync(null, entry.Timestamp!.Value, 10);
+
+        Assert.Equal("logs/eventlog?limit=10&sortorder=DESC&to=2026-10-01%2008%3A12%3A42", transport.Url);
+    }
+
+    [Theory]
     [InlineData(7, "logs/alertlog/7?limit=1&sortorder=DESC&to=2026-10-01%2008%3A12%3A41")]
     [InlineData(null, "logs/alertlog?limit=1&sortorder=DESC&to=2026-10-01%2008%3A12%3A41")]
     public async Task Alert_log_up_to_a_time_passes_the_time_back_as_it_came(int? deviceId, string expected)

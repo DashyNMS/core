@@ -62,12 +62,14 @@ public interface ILogsApi
     /// <remarks>
     /// LibreNMS compares the time with the column the entries carry, so to
     /// continue from an entry pass its own <see cref="EventLogEntry.Timestamp"/>
-    /// back as it came: no time zone conversion is needed or wanted. Entries at
+    /// back as it came, and never one that's been through <see cref="ServerTime"/>:
+    /// no time zone conversion is made, whatever the value's kind. Entries at
     /// that exact second come back again, because several can share one, so match
-    /// them by <see cref="EventLogEntry.Id"/>.
+    /// them by <see cref="EventLogEntry.Id"/>. If a whole page has nothing new,
+    /// more than <paramref name="limit"/> share the second: ask for more.
     /// </remarks>
     /// <param name="deviceId">Device to fetch entries for, or null for every device.</param>
-    /// <param name="upTo">A time in the server's own terms, to the second.</param>
+    /// <param name="upTo">A time in the server's own terms. Part of a second counts as the next whole one, so nothing is skipped.</param>
     /// <param name="limit">Maximum entries to return.</param>
     /// <exception cref="NotSupportedException"><see cref="CanReadUpTo"/> is false.</exception>
     Task<IReadOnlyList<EventLogEntry>> ListEventLogUpToAsync(
