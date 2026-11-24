@@ -33,7 +33,7 @@ Every DashyNMS repository builds the same way.
 | **CI** (`ci.yml`) | every pull request, and first in each build below | none |
 | **Edge build** (`edge-build.yml`) | every commit to `main` | `2.0.0-edge.<build>` |
 | **Nightly build** (`nightly-build.yml`) | 00:00 UTC (GitHub may start it late) if `main` changed since the last nightly, or by hand | `2.0.0-nightly.<build>` |
-| **Release build** (`release-build.yml`) | a GitHub release is published | `2.0.0` |
+| **Release build** (`release-build.yml`) | a tag `v2.0.0` is pushed | `2.0.0` |
 | **CodeQL** and **Dependency submission** | as their names say | none |
 
 The three builds call `package.yml`, which packs `DashyNMS.Core`, attests its provenance and publishes it to GitHub Packages. `<build>` is the workflow's run number. A published version is never pushed over: if an edge or nightly publish fails part way, run the build again by hand. Check a package with `gh attestation verify <file> --repo DashyNMS/core`.
@@ -42,12 +42,18 @@ The three builds call `package.yml`, which packs `DashyNMS.Core`, attests its pr
 
 Renaming a workflow file starts its run number again from 1, which would repeat published versions. Don't rename `edge-build.yml` or `nightly-build.yml` without raising `<Version>` at the same time.
 
-**Releasing:** check that `docs/releases/<version>.md` reads well, then publish a blank GitHub release on `main`'s newest commit, with the tag `v<version>` matching `<Version>` in `Directory.Build.props`. It goes back to being a draft while the package is built. The last step fills in its title and [notes](#release-notes) and publishes it again. Then raise `<Version>`, so later edge and nightly packages rank above the release.
+**Releasing:** check that `docs/releases/<version>.md` reads well, then tag `main`'s newest commit and push only the tag:
 
-If a release fails it stays a draft. Don't publish the draft by hand, because that starts the build again:
+```bash
+git tag v2.0.0 origin/main && git push origin v2.0.0
+```
 
-- **Nothing on `main` has to change:** run **Release build** by hand with the tag. A package that was already pushed from that commit is kept, after its provenance is checked.
-- **It needs a fix:** the release has to be `main`'s newest commit, so merge the fix, delete the draft with its tag (`gh release delete v2.0.0 --cleanup-tag`) and publish it again. If its package was already pushed, that version is used up: raise `<Version>` first.
+The tag has to match `<Version>` in `Directory.Build.props`. Don't create the release on GitHub first, because everyone watching would be told about an empty one: the build creates it at the end, with its [notes](#release-notes). Then raise `<Version>`, so later edge and nightly builds rank above the release.
+
+If it fails there's no release:
+
+- **Nothing on `main` has to change:** run **Release build** by hand with the tag. The package, if it was already pushed from that commit, is kept after its provenance is checked.
+- **It needs a fix:** the tag has to be on `main`'s newest commit, so merge the fix, delete the tag (`git push --delete origin v2.0.0`) and push it again. If the package was already pushed, that version is used up: raise `<Version>` first.
 
 ### Release notes
 
@@ -68,7 +74,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 | CI | fails if the file is missing, empty or has other headings |
 | Edge | none: the package, or the rolling release, points at its commit |
 | Nightly | a tag and prerelease with a copy of the file, and a link to the changes since the last build |
-| Release | the last step replaces whatever the blank release said with the file |
+| Release | the last step creates the release with the file as its notes |
 
 **Raising `<Version>`:** the same pull request adds `docs/releases/<new version>.md` with its first line, because CI won't pass without it.
 

@@ -2,7 +2,7 @@
 
     edge      <version>-edge.<run number>       every commit to main
     nightly   <version>-nightly.<run number>    00:00 UTC if main changed, or by hand
-    release   <version>                         a published GitHub release
+    release   <version>                         a pushed v<version> tag
     check     nothing: only checks that the release notes are there
 
 <version> is the version being built towards, in Directory.Build.props. The
@@ -82,7 +82,7 @@ def nightly_notes(text, tag, commit, repository):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("channel", choices=["edge", "nightly", "release", "check"])
-    parser.add_argument("--tag", help="the published release's tag (release only)")
+    parser.add_argument("--tag", help="the release's tag (release only)")
     parser.add_argument("--notes", type=Path, help="where to write the notes to publish")
     args = parser.parse_args()
 
