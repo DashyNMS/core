@@ -147,6 +147,7 @@ public sealed class AppSettings
     public bool DeviceNavExpanded { get; set; } = true;
 
     private UpdateChannel? _updateChannel;
+    private bool _includePreviewBuilds;
 
     /// <summary>
     /// Which builds update checks offer, both for the Settings check and the
@@ -160,15 +161,27 @@ public sealed class AppSettings
         set
         {
             _updateChannel = value;
-            IncludePreviewBuilds = value != UpdateChannel.Stable;
+            _includePreviewBuilds = value != UpdateChannel.Stable;
         }
     }
 
     /// <summary>
     /// The choice <see cref="UpdateChannel"/> replaced, still saved so that an
-    /// app from before the channels keeps getting prereleases.
+    /// app from before the channels keeps getting prereleases. Changing it
+    /// moves the channel when the two would disagree.
     /// </summary>
-    public bool IncludePreviewBuilds { get; set; }
+    public bool IncludePreviewBuilds
+    {
+        get => _includePreviewBuilds;
+        set
+        {
+            _includePreviewBuilds = value;
+            if (_updateChannel is { } channel && value != (channel != UpdateChannel.Stable))
+            {
+                _updateChannel = value ? UpdateChannel.Nightly : UpdateChannel.Stable;
+            }
+        }
+    }
 
     /// <summary>Desktop's diagnostics choice. Undecided leaves sharing off and the consent prompt pending.</summary>
     public DiagnosticsSharingPreference DiagnosticsSharing { get; set; }

@@ -47,12 +47,26 @@ jobs:
         with:
           subject-path: artifacts/*.nupkg
 
-      # No --skip-duplicate: an existing version must fail rather than be
-      # reported as published with bytes this run didn't produce.
+      # A version is only ever one set of bytes, so never --skip-duplicate. One
+      # that's already there is accepted only if this workflow attested it from
+      # this commit: then an earlier run published it and failed afterwards.
       - name: Publish to GitHub Packages
         env:
           PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
+          COMMIT: ${{ inputs.commit }}
         run: |
+          status=$(curl -sSL -u "DashyNMS:$PUSH_TOKEN" -o published.nupkg -w '%{http_code}' \
+            "https://nuget.pkg.github.com/DashyNMS/download/dashynms.core/$VERSION/dashynms.core.$VERSION.nupkg")
+          if [ "$status" = 200 ]; then
+            gh attestation verify published.nupkg --repo DashyNMS/core \
+              --signer-workflow DashyNMS/core/.github/workflows/package.yml --source-digest "$COMMIT"
+            echo "DashyNMS.Core $VERSION was already published from this commit" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          elif [ "$status" != 404 ]; then
+            echo "::error::GitHub Packages answered $status when asked for $VERSION."
+            exit 1
+          fi
           dotnet nuget push "artifacts/*.nupkg" --source https://nuget.pkg.github.com/DashyNMS/index.json --api-key "$PUSH_TOKEN"
           echo "Published DashyNMS.Core $VERSION" >> "$GITHUB_STEP_SUMMARY"

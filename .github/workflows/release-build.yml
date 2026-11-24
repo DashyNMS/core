@@ -3,9 +3,7 @@ name: Release build
 # Publishing a GitHub release (tag v<version>, on main's newest commit) builds
 # it. The release goes back to being a draft while that happens, and is
 # published again when everything in it is ready. If a build fails it stays a
-# draft: fix it, then run this by hand with the tag. If the package was pushed
-# and a later step failed, re-run the failed jobs instead: the version can't be
-# pushed twice.
+# draft: see "Builds and releases" in docs/DEVELOPMENT.md.
 on:
   release:
     types: [published]

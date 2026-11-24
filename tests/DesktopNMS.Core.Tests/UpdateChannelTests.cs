@@ -93,6 +93,8 @@ public sealed class UpdateChannelTests
     {
         Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(new Releases { Latest = Release("v2.0.0") }, UpdateChannel.Edge))!.Version);
         Assert.Null(Edge("Edge build").Version);
+        Assert.Null(Edge("2.0.0-edge.8 - hotfix").Version);
+        Assert.Null(Edge("2.0.0").Version);
         Assert.Null(await UpdateChannels.FindAsync(new Releases { ByTag = Edge("Edge build") }, UpdateChannel.Edge));
     }
 
@@ -131,6 +133,19 @@ public sealed class UpdateChannelTests
         Assert.Equal(channel != UpdateChannel.Stable, settings.IncludePreviewBuilds);
         Assert.Equal(channel, settings.Clone().UpdateChannel);
         Assert.Equal(channel, JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(settings, Json), Json)!.UpdateChannel);
+    }
+
+    [Theory]
+    [InlineData(UpdateChannel.Stable, true, UpdateChannel.Nightly)]
+    [InlineData(UpdateChannel.Edge, true, UpdateChannel.Edge)]
+    [InlineData(UpdateChannel.Edge, false, UpdateChannel.Stable)]
+    [InlineData(UpdateChannel.Nightly, false, UpdateChannel.Stable)]
+    public void The_old_choice_moves_the_channel_only_when_they_disagree(UpdateChannel channel, bool previews, UpdateChannel expected)
+    {
+        var settings = new AppSettings { UpdateChannel = channel };
+        settings.IncludePreviewBuilds = previews;
+        Assert.Equal(expected, settings.UpdateChannel);
+        Assert.Equal(expected != UpdateChannel.Stable, settings.IncludePreviewBuilds);
     }
 
     private static GitHubRelease Release(string tag, bool prerelease = false) => new() { TagName = tag, Name = tag, Prerelease = prerelease };

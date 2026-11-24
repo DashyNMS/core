@@ -58,6 +58,16 @@ class BuildVersionTests(unittest.TestCase):
         self.assertNotIn("Bump", text)
         self.assertNotIn("first commit", text)
 
+    def test_notes_start_from_whatever_came_out_last(self):
+        self.git("tag", "v2.0.0-nightly.4")
+        later = {"GIT_COMMITTER_DATE": "2100-01-01T00:00:00Z"}
+        os.environ.update(later)
+        self.addCleanup(lambda: [os.environ.pop(key) for key in later])
+        self.commit("feat: in the release")
+        self.git("tag", "v2.0.0")
+        self.run_script("nightly", "--notes", "out/notes.md")
+        self.assertIn("releases/tag/v2.0.0)", (self.root / "out/notes.md").read_text())
+
     def test_the_edge_tag_is_not_a_build_to_list_changes_from(self):
         self.git("tag", "v1.0.0")
         self.commit("feat: something new")

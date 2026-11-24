@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace DesktopNMS.Core.Updates;
 
@@ -19,7 +20,9 @@ public sealed class GitHubRelease
     /// </summary>
     [JsonIgnore]
     public string? Version => TagName != UpdateChannels.EdgeTag ? TagName
-        : ReleaseVersion.ChannelOf(Name) == UpdateChannel.Edge ? "v" + Name!.Trim().TrimStart('v') : null;
+        : Name is { } title && EdgeTitle.IsMatch(title) ? "v" + title : null;
+
+    private static readonly Regex EdgeTitle = new(@"^\d+\.\d+\.\d+-edge\.\d+$", RegexOptions.CultureInvariant);
 
     /// <summary>The release's display title, e.g. "0.2.0 - Health tab".</summary>
     [JsonPropertyName("name")]

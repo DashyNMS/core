@@ -100,7 +100,8 @@ def main():
         changed = os.environ.get("GITHUB_EVENT_NAME") != "schedule" or last is None or git("rev-parse", f"{last}^{{commit}}") != commit
         if args.notes:
             args.notes.parent.mkdir(parents=True, exist_ok=True)
-            since = last or newest_tag("v*-preview.*") or newest_tag("v[0-9]*")
+            # Whatever people were last given: a nightly, a preview or a release.
+            since = newest_tag("v[0-9]*")
             args.notes.write_text(notes(since, os.environ.get("GITHUB_REPOSITORY", "")), encoding="utf-8", newline="\n")
 
     result = {"version": version, "tag": f"v{version}", "commit": commit, "changed": str(changed).lower(), "store_build": store_build()}
