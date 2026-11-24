@@ -1114,9 +1114,10 @@ internal sealed class LogsApi : ILogsApi
     /// </summary>
     private static string UpTo(string log, int? deviceId, DateTime upTo, int limit)
     {
-        // Rounding down would leave out the entry it came from.
+        // Rounding down would leave out the entry it came from. The last second
+        // there is can't be rounded up, and nothing comes after it anyway.
         var part = upTo.Ticks % TimeSpan.TicksPerSecond;
-        var second = part == 0 ? upTo : upTo.AddTicks(TimeSpan.TicksPerSecond - part);
+        var second = part == 0 || DateTime.MaxValue - upTo < TimeSpan.FromSeconds(1) ? upTo : upTo.AddTicks(TimeSpan.TicksPerSecond - part);
         var to = Uri.EscapeDataString(second.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
         return string.Create(
             CultureInfo.InvariantCulture,

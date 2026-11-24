@@ -79,6 +79,16 @@ public class LogsApiTests
     }
 
     [Fact]
+    public async Task The_last_time_there_is_can_be_asked_for()
+    {
+        var transport = new RecordingTransport();
+
+        await new LogsApi(transport).ListEventLogUpToAsync(null, DateTime.MaxValue, 10);
+
+        Assert.Equal("logs/eventlog?limit=10&sortorder=DESC&to=9999-12-31%2023%3A59%3A59", transport.Url);
+    }
+
+    [Fact]
     public async Task An_implementation_that_predates_reading_up_to_a_time_says_it_cannot()
     {
         ILogsApi logs = new PlainLogs();
