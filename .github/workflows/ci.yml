@@ -36,7 +36,7 @@ jobs:
         run: dotnet test DashyNMS.Core.slnx -c Release
 
   scripts:
-    name: Build scripts
+    name: Build scripts and release notes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,6 +45,8 @@ jobs:
 
       - name: Test the build scripts
         run: python3 -B -m unittest discover -s scripts/tests -v
+      - name: Check this version's release notes
+        run: python3 scripts/build_version.py check
 
   result:
     name: CI result

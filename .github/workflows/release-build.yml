@@ -1,9 +1,10 @@
 name: Release build
 
-# Publishing a GitHub release (tag v<version>, on main's newest commit) builds
-# it. The release goes back to being a draft while that happens, and is
-# published again when everything in it is ready. If a build fails it stays a
-# draft: see "Builds and releases" in docs/DEVELOPMENT.md.
+# Publishing a blank GitHub release (tag v<version>, on main's newest commit)
+# builds it. The release goes back to being a draft while that happens. The last
+# step gives it its title and notes, from docs/releases, and publishes it again.
+# If a build fails it stays a draft: see "Builds and releases" in
+# docs/DEVELOPMENT.md.
 on:
   release:
     types: [published]
@@ -57,7 +58,13 @@ jobs:
         id: version
         env:
           TAG: ${{ inputs.tag }}
-        run: python3 scripts/build_version.py release --tag "$TAG"
+        run: python3 scripts/build_version.py release --tag "$TAG" --notes artifacts/notes.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: artifacts/notes.md
+          if-no-files-found: error
+          retention-days: 14
 
   ci:
     name: CI
@@ -84,9 +91,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Publish the release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+      - name: Write the notes and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
           TAG: ${{ needs.version.outputs.tag }}
-        run: gh release edit "$TAG" --draft=false --latest
+        run: gh release edit "$TAG" --title "$VERSION" --notes-file notes.md --draft=false --latest

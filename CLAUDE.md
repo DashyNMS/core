@@ -4,6 +4,7 @@ Shared, UI-free .NET library for the DashyNMS desktop app, DashyNMS Mobile and t
 
 - Every change is a consumer-facing API change. Say in the PR what desktop, mobile and MCP need to do, and version accordingly (semver; a breaking change is a major bump). Every commit to `main` publishes a `2.0.0-edge.N` package ([builds and releases](docs/DEVELOPMENT.md#builds-and-releases)).
 - Tests must pass on Windows, macOS and Linux (`dotnet test DashyNMS.Core.slnx`). Mark platform-specific tests with `[WindowsFact]` / `[NotWindowsFact]`.
+- Release notes: a change consumers would notice adds or updates its line in `docs/releases/<version>.md` (the `<Version>` in `Directory.Build.props`) in the same PR. Never write a GitHub release's notes by hand. Read [Release notes](docs/DEVELOPMENT.md#release-notes) first.
 - Front-end concerns stay out: no UI types, no dispatcher. Events are raised on the thread that does the work; each app marshals.
 - Never put real device names, hostnames, addresses or other identifiable network data in issues, PRs, commits or test fixtures. Use `example.net` and documentation address ranges.
 - Match desktop's style: British spelling in user-facing text, XML doc comments explaining *why*, sealed classes.
