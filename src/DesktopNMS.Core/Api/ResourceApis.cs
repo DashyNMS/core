@@ -1090,6 +1090,31 @@ internal sealed class LogsApi : ILogsApi
 
         return _transport.GetCollectionAsync<EventLogEntry>(url, "logs", cancellationToken);
     }
+
+    public bool CanReadUpTo => true;
+
+    public Task<IReadOnlyList<EventLogEntry>> ListEventLogUpToAsync(
+        int? deviceId,
+        DateTime upTo,
+        int limit,
+        CancellationToken cancellationToken = default)
+        => _transport.GetCollectionAsync<EventLogEntry>(UpTo("eventlog", deviceId, upTo, limit), "logs", cancellationToken);
+
+    public Task<IReadOnlyList<AlertLogEntry>> ListAlertLogUpToAsync(
+        int? deviceId,
+        DateTime upTo,
+        int limit,
+        CancellationToken cancellationToken = default)
+        => _transport.GetCollectionAsync<AlertLogEntry>(UpTo("alertlog", deviceId, upTo, limit), "logs", cancellationToken);
+
+    /// <summary>
+    /// The time is written as the column stores it ("2026-10-01 08:12:41"), never
+    /// converted: LibreNMS hands it to the database as text. A purely numeric
+    /// "to" would be taken as an entry ID, which this never is.
+    /// </summary>
+    private static string UpTo(string log, int? deviceId, DateTime upTo, int limit) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"logs/{log}{DeviceSegment(deviceId)}?limit={Math.Max(1, limit)}&sortorder=DESC&to={Uri.EscapeDataString(upTo.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture))}");
 }
 
 /// <summary>Implementation of <see cref="IGraphsApi"/>.</summary>
