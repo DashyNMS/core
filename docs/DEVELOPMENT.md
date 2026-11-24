@@ -72,7 +72,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 | Build | Notes |
 | --- | --- |
 | CI | fails if the file is missing, empty or has other headings |
-| Edge | none: the package, or the rolling release, points at its commit |
+| Edge | a tag and prerelease with links to the file and to the changes since the last edge build |
 | Nightly | a tag and prerelease with a copy of the file, and a link to the changes since the last build |
 | Release | the last step creates the release with the file as its notes |
 

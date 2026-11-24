@@ -6,13 +6,8 @@ namespace DesktopNMS.Core.Updates;
 /// </summary>
 public static class UpdateChannels
 {
-    /// <summary>
-    /// The one release that always holds the newest edge build: its title is
-    /// the build's version and its files are replaced by each build. The tag
-    /// is 0.0.0 because apps from before the channels read every tag as a
-    /// version, and this has to rank below whatever they're running.
-    /// </summary>
-    public const string EdgeTag = "v0.0.0-edge";
+    // Enough to reach back past a day's edge builds to the last nightly.
+    private const int RecentReleases = 100;
 
     /// <summary>Whether <paramref name="channel"/> is offered builds of <paramref name="version"/>. Stable releases reach everyone.</summary>
     public static bool Offers(UpdateChannel channel, string? version)
@@ -23,30 +18,18 @@ public static class UpdateChannels
 
     /// <summary>
     /// The newest release for <paramref name="channel"/>, or null if it has
-    /// none or GitHub couldn't be read. The edge release is as old as its
-    /// first build and a stable one can be older than every recent nightly,
-    /// so neither is left to be found in the list of recent releases.
+    /// none or GitHub couldn't be read. A stable release can be older than
+    /// every recent build, so it's read as well as the list.
     /// </summary>
     public static async Task<GitHubRelease?> FindAsync(IGitHubReleaseService releases, UpdateChannel channel, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(releases);
 
-        switch (channel)
-        {
-            case UpdateChannel.Nightly:
-                var recent = await releases.GetReleasesAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-                var finished = await releases.GetLatestReleaseAsync(cancellationToken).ConfigureAwait(false);
-                return Newest(recent.Append(finished).OfType<GitHubRelease>(), channel);
-
-            case UpdateChannel.Edge:
-                var edge = await releases.GetReleaseByTagAsync(EdgeTag, cancellationToken).ConfigureAwait(false);
-                var stable = await releases.GetLatestReleaseAsync(cancellationToken).ConfigureAwait(false);
-                return Newest(new[] { edge, stable }.OfType<GitHubRelease>(), channel);
-
-            default:
-                var latest = await releases.GetLatestReleaseAsync(cancellationToken).ConfigureAwait(false);
-                return latest is null ? null : Newest(new[] { latest }, UpdateChannel.Stable);
-        }
+        var latest = await releases.GetLatestReleaseAsync(cancellationToken).ConfigureAwait(false);
+        var recent = channel == UpdateChannel.Stable
+            ? Array.Empty<GitHubRelease>()
+            : await releases.GetReleasesAsync(RecentReleases, cancellationToken).ConfigureAwait(false);
+        return Newest(recent.Append(latest).OfType<GitHubRelease>(), channel);
     }
 
     /// <summary>The newest of <paramref name="releases"/> that <paramref name="channel"/> is offered.</summary>
@@ -57,9 +40,9 @@ public static class UpdateChannels
         // Unrankable tags go first: one compares equal to everything, which
         // would leave the order of the rest undefined.
         return releases
-            .Where(r => !r.Draft && ReleaseVersion.IsValid(r.Version) && Offers(channel, r.Version)
+            .Where(r => !r.Draft && ReleaseVersion.IsValid(r.TagName) && Offers(channel, r.TagName)
                 && (channel != UpdateChannel.Stable || !r.Prerelease))
-            .OrderByDescending(r => r.Version, Comparer<string?>.Create(ReleaseVersion.Compare))
+            .OrderByDescending(r => r.TagName, Comparer<string?>.Create(ReleaseVersion.Compare))
             .FirstOrDefault();
     }
 
