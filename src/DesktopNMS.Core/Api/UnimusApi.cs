@@ -52,7 +52,7 @@ public sealed class UnimusApi : IUnimusApi, IDisposable
 
     private IRequestGate? _requestGate;
 
-    /// <summary>Optional host limit on requests in flight, as <see cref="LibreNmsTransport.RequestGate"/> (#99). Null by default.</summary>
+    /// <summary>Optional host limit on requests in flight, as <see cref="LibreNmsTransport.RequestGate"/> (#99), except that a connection test takes a turn too. Null by default.</summary>
     public IRequestGate? RequestGate
     {
         get => Volatile.Read(ref _requestGate);

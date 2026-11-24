@@ -13,6 +13,14 @@ namespace DesktopNMS.Core.Api;
 /// busy server would turn into timeouts it never caused.
 /// </para>
 /// <para>
+/// Core puts no limit on the wait either: a host bounds it by cancelling the
+/// caller. A retry waits again, behind whatever has queued since. Anything a
+/// client raises while handling an answer, such as
+/// <see cref="LibreNmsTransport.CertificateRejected"/>, is raised inside the
+/// turn, so a handler that blocks holds the turn until it returns and must not
+/// wait on another request.
+/// </para>
+/// <para>
 /// Core sets no limit of its own and asks for nothing by default: the clients'
 /// <c>RequestGate</c> is null until a host sets one.
 /// </para>
