@@ -83,6 +83,15 @@ public sealed class GraylogApi : IGraylogApi, IDisposable
         _logger = logger;
     }
 
+    private IRequestGate? _requestGate;
+
+    /// <summary>Optional host limit on requests in flight, as <see cref="LibreNmsTransport.RequestGate"/> (#99). Null by default.</summary>
+    public IRequestGate? RequestGate
+    {
+        get => Volatile.Read(ref _requestGate);
+        set => Volatile.Write(ref _requestGate, value);
+    }
+
     public bool IsConfigured
     {
         get
@@ -226,6 +235,10 @@ public sealed class GraylogApi : IGraylogApi, IDisposable
 
     private async Task<HttpResponseMessage> SendAsync(Func<GraylogConnection, string> relativeUrl, CancellationToken cancellationToken)
     {
+        // Before the client is picked up: it can be replaced (and disposed)
+        // while this attempt waits its turn.
+        using var turn = await RequestGate.EnterOrPassAsync(cancellationToken).ConfigureAwait(false);
+
         HttpClient http;
         GraylogConnection connection;
         lock (_sync)
