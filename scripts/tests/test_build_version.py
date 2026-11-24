@@ -60,7 +60,7 @@ class BuildVersionTests(unittest.TestCase):
 
     def test_notes_start_from_whatever_came_out_last(self):
         self.git("tag", "v2.0.0-nightly.4")
-        later = {"GIT_COMMITTER_DATE": "2100-01-01T00:00:00Z"}
+        later = {"GIT_COMMITTER_DATE": "2090-01-01T00:00:00Z"}
         os.environ.update(later)
         self.addCleanup(lambda: [os.environ.pop(key) for key in later])
         self.commit("feat: in the release")
