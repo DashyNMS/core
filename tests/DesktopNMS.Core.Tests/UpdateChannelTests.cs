@@ -76,6 +76,19 @@ public sealed class UpdateChannelTests
     }
 
     [Fact]
+    public async Task A_release_older_than_every_recent_nightly_is_still_found()
+    {
+        var service = new Releases { Latest = Release("v2.0.0") };
+        for (var build = 30; build > 20; build--) service.Recent.Add(Release($"v2.0.0-nightly.{build}", true));
+        Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.Version);
+        service.Recent[0] = Release("v2.1.0-nightly.31", true);
+        Assert.Equal("v2.1.0-nightly.31", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.Version);
+        // GitHub couldn't give one of the two.
+        service.Latest = null;
+        Assert.Equal("v2.1.0-nightly.31", (await UpdateChannels.FindAsync(service, UpdateChannel.Nightly))!.Version);
+    }
+
+    [Fact]
     public async Task An_edge_release_that_cannot_be_read_still_leaves_the_stable_one()
     {
         Assert.Equal("v2.0.0", (await UpdateChannels.FindAsync(new Releases { Latest = Release("v2.0.0") }, UpdateChannel.Edge))!.Version);

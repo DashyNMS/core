@@ -23,9 +23,9 @@ public static class UpdateChannels
 
     /// <summary>
     /// The newest release for <paramref name="channel"/>, or null if it has
-    /// none or GitHub couldn't be read. Edge is fetched by its tag: the
-    /// release is as old as its first build, so a list of recent releases
-    /// stops including it.
+    /// none or GitHub couldn't be read. The edge release is as old as its
+    /// first build and a stable one can be older than every recent nightly,
+    /// so neither is left to be found in the list of recent releases.
     /// </summary>
     public static async Task<GitHubRelease?> FindAsync(IGitHubReleaseService releases, UpdateChannel channel, CancellationToken cancellationToken = default)
     {
@@ -34,7 +34,9 @@ public static class UpdateChannels
         switch (channel)
         {
             case UpdateChannel.Nightly:
-                return Newest(await releases.GetReleasesAsync(cancellationToken: cancellationToken).ConfigureAwait(false), channel);
+                var recent = await releases.GetReleasesAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                var finished = await releases.GetLatestReleaseAsync(cancellationToken).ConfigureAwait(false);
+                return Newest(recent.Append(finished).OfType<GitHubRelease>(), channel);
 
             case UpdateChannel.Edge:
                 var edge = await releases.GetReleaseByTagAsync(EdgeTag, cancellationToken).ConfigureAwait(false);

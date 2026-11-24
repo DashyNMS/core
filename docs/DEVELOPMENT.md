@@ -36,13 +36,18 @@ Every DashyNMS repository builds the same way.
 | **Release build** (`release-build.yml`) | a GitHub release is published | `2.0.0` |
 | **CodeQL** and **Dependency submission** | as their names say | none |
 
-The three builds call `package.yml`, which packs `DashyNMS.Core`, attests its provenance and publishes it to GitHub Packages. `<build>` is the workflow's run number. A published version is never pushed over: if a publish fails part way, run the build again by hand for a new number. Check a package with `gh attestation verify <file> --repo DashyNMS/core`.
+The three builds call `package.yml`, which packs `DashyNMS.Core`, attests its provenance and publishes it to GitHub Packages. `<build>` is the workflow's run number. A published version is never pushed over: if an edge or nightly publish fails part way, run the build again by hand for a new number. A release has no other number to take: see below. Check a package with `gh attestation verify <file> --repo DashyNMS/core`.
 
 `2.0.0-ci.N` packages came from the development builds this replaced. They rank below every edge package, and stay available to the apps that pin them.
 
 Renaming a workflow file starts its run number again from 1, which would repeat published versions. Don't rename `edge-build.yml` or `nightly-build.yml` without raising `<Version>` at the same time.
 
 **Releasing:** publish a GitHub release on `main`'s newest commit, with the tag `v<version>` matching `<Version>` in `Directory.Build.props`. It goes back to being a draft while the package is built, and is published again when that's done. Then raise `<Version>`, so later edge and nightly packages rank above the release.
+
+If a release fails, it stays a draft, and what to do depends on whether the package was pushed. Look for the version under [packages](https://github.com/orgs/DashyNMS/packages?repo_name=core):
+
+- **Not there:** fix the problem and run **Release build** by hand with the tag.
+- **There:** check it with `gh attestation verify`, then re-run the failed jobs if only **Publish** failed, or publish the draft by hand if the push itself was reported as failed. Never run the whole build again for that version: the package can't be replaced.
 
 ## Commits, pull requests and issues
 
