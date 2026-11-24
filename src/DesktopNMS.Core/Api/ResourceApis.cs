@@ -1090,6 +1090,39 @@ internal sealed class LogsApi : ILogsApi
 
         return _transport.GetCollectionAsync<EventLogEntry>(url, "logs", cancellationToken);
     }
+
+    public bool CanReadUpTo => true;
+
+    public Task<IReadOnlyList<EventLogEntry>> ListEventLogUpToAsync(
+        int? deviceId,
+        DateTime upTo,
+        int limit,
+        CancellationToken cancellationToken = default)
+        => _transport.GetCollectionAsync<EventLogEntry>(UpTo("eventlog", deviceId, upTo, limit), "logs", cancellationToken);
+
+    public Task<IReadOnlyList<AlertLogEntry>> ListAlertLogUpToAsync(
+        int? deviceId,
+        DateTime upTo,
+        int limit,
+        CancellationToken cancellationToken = default)
+        => _transport.GetCollectionAsync<AlertLogEntry>(UpTo("alertlog", deviceId, upTo, limit), "logs", cancellationToken);
+
+    /// <summary>
+    /// The time is written as the column stores it ("2026-10-01 08:12:41"), never
+    /// converted: LibreNMS hands it to the database as text. A purely numeric
+    /// "to" would be taken as an entry ID, which this never is.
+    /// </summary>
+    private static string UpTo(string log, int? deviceId, DateTime upTo, int limit)
+    {
+        // Rounding down would leave out the entry it came from. The last second
+        // there is can't be rounded up, and nothing comes after it anyway.
+        var part = upTo.Ticks % TimeSpan.TicksPerSecond;
+        var second = part == 0 || DateTime.MaxValue - upTo < TimeSpan.FromSeconds(1) ? upTo : upTo.AddTicks(TimeSpan.TicksPerSecond - part);
+        var to = Uri.EscapeDataString(second.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"logs/{log}{DeviceSegment(deviceId)}?limit={Math.Max(1, limit)}&sortorder=DESC&to={to}");
+    }
 }
 
 /// <summary>Implementation of <see cref="IGraphsApi"/>.</summary>
