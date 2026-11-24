@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace DesktopNMS.Core.Updates;
 
@@ -11,6 +12,17 @@ public sealed class GitHubRelease
     /// <summary>The tag the release was cut from, e.g. "v0.2.0".</summary>
     [JsonPropertyName("tag_name")]
     public string? TagName { get; set; }
+
+    /// <summary>
+    /// The version the release's files are, e.g. "v0.2.0". The tag, except for
+    /// the edge release, whose tag never changes and whose title is the
+    /// version. A title that isn't an edge version leaves nothing to offer.
+    /// </summary>
+    [JsonIgnore]
+    public string? Version => TagName != UpdateChannels.EdgeTag ? TagName
+        : Name is { } title && EdgeTitle.IsMatch(title) ? "v" + title : null;
+
+    private static readonly Regex EdgeTitle = new(@"^\d+\.\d+\.\d+-edge\.\d+$", RegexOptions.CultureInvariant);
 
     /// <summary>The release's display title, e.g. "0.2.0 - Health tab".</summary>
     [JsonPropertyName("name")]

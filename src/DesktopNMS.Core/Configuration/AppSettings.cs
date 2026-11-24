@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using DesktopNMS.Core.Alerting;
 using DesktopNMS.Core.Intelligence;
 using DesktopNMS.Core.Models;
+using DesktopNMS.Core.Updates;
 
 namespace DesktopNMS.Core.Configuration;
 
@@ -145,14 +146,42 @@ public sealed class AppSettings
     /// <summary>Device Details' sidebar shows its labels and section headings (the default) rather than icons only.</summary>
     public bool DeviceNavExpanded { get; set; } = true;
 
+    private UpdateChannel? _updateChannel;
+    private bool _includePreviewBuilds;
+
     /// <summary>
-    /// Also consider GitHub pre-release ("preview") builds - rollups of
-    /// in-progress work published between stable releases - when checking
-    /// for updates, both for the Settings &gt; About check and the
-    /// background startup check. Off by default: most users should only
-    /// ever be nudged towards a stable release.
+    /// Which builds update checks offer, both for the Settings check and the
+    /// background one. Settings saved before the channels use
+    /// <see cref="IncludePreviewBuilds"/>: on becomes Nightly, which replaced
+    /// the previews.
     /// </summary>
-    public bool IncludePreviewBuilds { get; set; }
+    public UpdateChannel UpdateChannel
+    {
+        get => _updateChannel ?? (IncludePreviewBuilds ? UpdateChannel.Nightly : UpdateChannel.Stable);
+        set
+        {
+            _updateChannel = value;
+            _includePreviewBuilds = value != UpdateChannel.Stable;
+        }
+    }
+
+    /// <summary>
+    /// The choice <see cref="UpdateChannel"/> replaced, still saved so that an
+    /// app from before the channels keeps getting prereleases. Changing it
+    /// moves the channel when the two would disagree.
+    /// </summary>
+    public bool IncludePreviewBuilds
+    {
+        get => _includePreviewBuilds;
+        set
+        {
+            _includePreviewBuilds = value;
+            if (_updateChannel is { } channel && value != (channel != UpdateChannel.Stable))
+            {
+                _updateChannel = value ? UpdateChannel.Nightly : UpdateChannel.Stable;
+            }
+        }
+    }
 
     /// <summary>Desktop's diagnostics choice. Undecided leaves sharing off and the consent prompt pending.</summary>
     public DiagnosticsSharingPreference DiagnosticsSharing { get; set; }
@@ -489,6 +518,7 @@ public sealed class AppSettings
         NavExpanded = NavExpanded,
         DeviceNavExpanded = DeviceNavExpanded,
         IncludePreviewBuilds = IncludePreviewBuilds,
+        _updateChannel = _updateChannel,
         DiagnosticsSharing = DiagnosticsSharing,
         DiagnosticsConsentVersion = DiagnosticsConsentVersion,
         SuppressBulkAlertActionConfirmation = SuppressBulkAlertActionConfirmation,

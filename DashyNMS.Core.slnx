@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DesktopNMS.Core/DesktopNMS.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DesktopNMS.Core.Tests/DesktopNMS.Core.Tests.csproj" />
+  </Folder>
+</Solution>
