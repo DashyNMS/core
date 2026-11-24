@@ -99,6 +99,15 @@ class BuildVersionTests(unittest.TestCase):
         self.assertGreater(build, 400_000)
         self.assertLess(build, 2_000_000_000)
 
+    def test_a_release_does_not_ship_a_build_of_another_package(self):
+        (self.root / "Directory.Build.props").write_text(
+            "<Project><PropertyGroup><Version>2.0.0</Version><DashyNMSCoreVersion>2.0.0-edge.1</DashyNMSCoreVersion></PropertyGroup></Project>")
+        self.commit("build: pin")
+        self.git("tag", "v2.0.0")
+        self.assertIsNone(self.run_script("release", "--tag", "v2.0.0"))
+        self.assertIn("DashyNMSCoreVersion", self.error)
+        self.assertIsNotNone(self.run_script("edge"))
+
     def test_a_prerelease_base_version_is_refused(self):
         (self.root / "Directory.Build.props").write_text("<Project><PropertyGroup><Version>2.0.0-dev</Version></PropertyGroup></Project>")
         self.assertIsNone(self.run_script("edge"))

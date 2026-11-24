@@ -97,6 +97,10 @@ def main():
             raise SystemExit(f"The release tag {args.tag} must be v{base}, the version in Directory.Build.props.")
         if git("rev-parse", "--verify", f"refs/tags/{args.tag}^{{commit}}") != commit:
             raise SystemExit(f"{args.tag} must be the newest commit on main: that's what is built and signed.")
+        # A release pins other DashyNMS packages at their releases, not builds of them.
+        builds = re.findall(r"<(DashyNMS\w+Version)>[^<]*-[^<]*<", Path("Directory.Build.props").read_text(encoding="utf-8"))
+        if builds:
+            raise SystemExit(f"Pin a release of {', '.join(builds)} in Directory.Build.props before releasing this.")
         version = base
     else:
         version = f"{base}-{args.channel}.{run_number()}"
