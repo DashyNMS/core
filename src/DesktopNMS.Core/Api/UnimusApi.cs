@@ -50,6 +50,15 @@ public sealed class UnimusApi : IUnimusApi, IDisposable
         _logger = logger;
     }
 
+    private IRequestGate? _requestGate;
+
+    /// <summary>Optional host limit on requests in flight, as <see cref="LibreNmsTransport.RequestGate"/> (#99), except that a connection test takes a turn too. Null by default.</summary>
+    public IRequestGate? RequestGate
+    {
+        get => Volatile.Read(ref _requestGate);
+        set => Volatile.Write(ref _requestGate, value);
+    }
+
     public bool IsConfigured
     {
         get
@@ -242,6 +251,10 @@ public sealed class UnimusApi : IUnimusApi, IDisposable
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string relativeUrl, CancellationToken cancellationToken)
     {
+        // Before the client is picked up: it can be replaced (and disposed)
+        // while this attempt waits its turn.
+        using var turn = await RequestGate.EnterOrPassAsync(cancellationToken).ConfigureAwait(false);
+
         HttpClient http;
         lock (_sync)
         {

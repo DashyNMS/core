@@ -58,6 +58,21 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         set => Volatile.Write(ref _requestObserver, value);
     }
 
+    private IRequestGate? _requestGate;
+
+    /// <summary>
+    /// Optional host limit on requests in flight (#99), entered by every HTTP
+    /// attempt before its timeout starts. Null by default. A connection test
+    /// uses a transport of its own and isn't counted. A time reported to
+    /// <see cref="RequestObserver"/> includes the wait. Replacing the gate
+    /// affects attempts starting afterwards.
+    /// </summary>
+    public IRequestGate? RequestGate
+    {
+        get => Volatile.Read(ref _requestGate);
+        set => Volatile.Write(ref _requestGate, value);
+    }
+
     public ServerFailover Failover => _failover;
 
     /// <summary>
@@ -425,6 +440,10 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         object? body,
         CancellationToken cancellationToken)
     {
+        // Before the client is picked up: it can be replaced (and disposed)
+        // while this attempt waits its turn.
+        using var turn = await RequestGate.EnterOrPassAsync(cancellationToken).ConfigureAwait(false);
+
         HttpClient http;
         lock (_sync)
         {
@@ -529,6 +548,10 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
 
     private async Task<string> SendRawOnceAsync(string relativeUrl, CancellationToken cancellationToken)
     {
+        // Before the client is picked up: it can be replaced (and disposed)
+        // while this attempt waits its turn.
+        using var turn = await RequestGate.EnterOrPassAsync(cancellationToken).ConfigureAwait(false);
+
         HttpClient http;
         lock (_sync)
         {
@@ -595,6 +618,10 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
 
     private async Task<WebFile?> GetWebFileOnceAsync(string webPath, int maxBytes, CancellationToken cancellationToken)
     {
+        // Before the client is picked up: it can be replaced (and disposed)
+        // while this attempt waits its turn.
+        using var turn = await RequestGate.EnterOrPassAsync(cancellationToken).ConfigureAwait(false);
+
         HttpClient http;
         Uri webBase;
         lock (_sync)
