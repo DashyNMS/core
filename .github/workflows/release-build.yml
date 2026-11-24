@@ -17,9 +17,11 @@ on:
 permissions:
   contents: read
 
+# One at a time, in order, so an older release is never marked the latest again.
 concurrency:
-  group: release-build-${{ inputs.tag || github.ref_name }}
+  group: release-build
   cancel-in-progress: false
+  queue: max
 
 jobs:
   # Builds run from main, the only branch that may sign and publish.
@@ -98,9 +100,22 @@ jobs:
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.version.outputs.version }}
           TAG: ${{ needs.version.outputs.tag }}
+          COMMIT: ${{ needs.version.outputs.commit }}
         run: |
+          # A re-run keeps its old packages, and the tag may have moved to a fix since.
+          tagged=$(gh api "repos/$GH_REPO/commits/refs/tags/$TAG" --jq .sha)
+          if [ "$tagged" != "$COMMIT" ]; then
+            echo "::error::$TAG is now $tagged, and these packages are of $COMMIT. Run the release build again by hand."
+            exit 1
+          fi
+          # An old publish can be re-run after a newer release, so it's only the
+          # latest if nothing released outranks it.
+          # On its own line, so failing to list them stops here.
+          published=$(gh release list --exclude-drafts --exclude-pre-releases --limit 200 --json tagName --jq '.[].tagName')
+          newest=$(printf '%s\n%s\n' "$published" "$TAG" | sort -V | tail -n 1)
+          latest=$([ "$newest" = "$TAG" ] && echo true || echo false)
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release edit "$TAG" --title "$VERSION" --notes-file notes.md --draft=false --latest
+            gh release edit "$TAG" --title "$VERSION" --notes-file notes.md --draft=false --prerelease=false --latest="$latest"
           else
-            gh release create "$TAG" --verify-tag --title "$VERSION" --notes-file notes.md --latest
+            gh release create "$TAG" --verify-tag --title "$VERSION" --notes-file notes.md --latest="$latest"
           fi
