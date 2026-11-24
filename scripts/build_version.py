@@ -5,11 +5,16 @@
     release   <version>                         a published GitHub release
 
 <version> is the version being built towards, in Directory.Build.props. The
-result goes to $GITHUB_OUTPUT: version, tag, commit and changed. A nightly
-also gets notes, written from the commits since the last build people were
-given.
+result goes to $GITHUB_OUTPUT: version, tag, commit, changed and store_build. A
+nightly also gets notes, written from the commits since the last build people
+were given.
+
+store_build is the number app stores order builds by. They refuse one they've
+seen before, whichever workflow made it, and a run number starts again when a
+workflow is renamed, so it's the minutes since 2026 began.
 """
 import argparse
+import datetime
 import os
 from pathlib import Path
 import re
@@ -36,6 +41,11 @@ def run_number():
     if not re.fullmatch(r"[1-9]\d*", number):
         raise SystemExit("GITHUB_RUN_NUMBER isn't set.")
     return number
+
+
+def store_build(now=None):
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    return int((now - datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)).total_seconds() // 60)
 
 
 def newest_tag(pattern):
@@ -93,7 +103,7 @@ def main():
             since = last or newest_tag("v*-preview.*") or newest_tag("v[0-9]*")
             args.notes.write_text(notes(since, os.environ.get("GITHUB_REPOSITORY", "")), encoding="utf-8", newline="\n")
 
-    result = {"version": version, "tag": f"v{version}", "commit": commit, "changed": str(changed).lower()}
+    result = {"version": version, "tag": f"v{version}", "commit": commit, "changed": str(changed).lower(), "store_build": store_build()}
     lines = "".join(f"{key}={value}\n" for key, value in result.items())
     sys.stdout.write(lines)
     if "GITHUB_OUTPUT" in os.environ:

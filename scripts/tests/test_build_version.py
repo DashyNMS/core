@@ -75,6 +75,11 @@ class BuildVersionTests(unittest.TestCase):
         self.assertIsNone(self.run_script("release", "--tag", "v2.0.0"))
         self.assertIn("newest commit", self.error)
 
+    def test_store_build_numbers_are_past_the_ones_already_used(self):
+        build = int(self.run_script("edge")["store_build"])
+        self.assertGreater(build, 400_000)
+        self.assertLess(build, 2_000_000_000)
+
     def test_a_prerelease_base_version_is_refused(self):
         (self.root / "Directory.Build.props").write_text("<Project><PropertyGroup><Version>2.0.0-dev</Version></PropertyGroup></Project>")
         self.assertIsNone(self.run_script("edge"))
