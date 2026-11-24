@@ -53,7 +53,7 @@ The tag has to match `<Version>` in `Directory.Build.props`. Don't create the re
 If it fails there's no release:
 
 - **Nothing on `main` has to change:** run **Release build** by hand with the tag. The package, if it was already pushed from that commit, is kept after its provenance is checked.
-- **It needs a fix:** the tag has to be on `main`'s newest commit, so merge the fix, delete the tag (`git push --delete origin v2.0.0`) and push it again. If the package was already pushed, that version is used up: raise `<Version>` first.
+- **It needs a fix:** the tag has to be on `main`'s newest commit, so merge the fix, then move the tag: `git push --delete origin v2.0.0`, `git fetch origin`, `git tag -f v2.0.0 origin/main` and `git push origin v2.0.0`. If the package was already pushed, that version is used up: raise `<Version>` first.
 
 ### Release notes
 
