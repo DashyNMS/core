@@ -5,15 +5,19 @@ using System.Text.Json;
 namespace DesktopNMS.Core.Demo;
 
 /// <summary>
-/// The example network demo mode shows, and the screenshots are taken of: three sites,
-/// two dozen devices, their ports, sensors, neighbours, alerts and rules.
+/// The example network demo mode shows, and the screenshots are taken of: four sites,
+/// two dozen devices, their ports, sensors, neighbours, alerts and rules, and
+/// optionally many more switches (<see cref="DemoFleetOptions"/>).
 /// Example names and documentation addresses only (example.net, 192.0.2.0/24,
-/// 198.51.100.0/24, 203.0.113.0/24) - never anything from a real network.
+/// 198.51.100.0/24, 203.0.113.0/24, 2001:db8::/32) - never anything from a real network.
 /// Answers just enough of LibreNMS's API, in its own shapes, for each screen
 /// to fill; anything else gets an empty, successful envelope.
 /// </summary>
 internal sealed partial class DemoFleet
 {
+    /// <summary>The LibreNMS release this network answers as.</summary>
+    public const string ServerVersion = "26.9.1";
+
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
 
     private readonly DateTime _now;
@@ -32,16 +36,18 @@ internal sealed partial class DemoFleet
     {
         _options = options;
         _now = time.GetUtcNow().UtcDateTime;
-        _graphs = new DemoGraphs(time.GetLocalNow().DateTime);
+        _graphs = new DemoGraphs(time);
         AddLocations();
         AddDevices();
-        AddScaledDevices();
         AddLinks();
         AddSensors();
         AddRules();
         AddAlerts();
         AddEvents();
         AddEndpoints();
+
+        // After the default network, so its ids, and the sensors and links made from them, stay as they are.
+        AddScaledDevices();
         AddScaledActivity();
     }
 
@@ -268,7 +274,7 @@ internal sealed partial class DemoFleet
                 {
                     new
                     {
-                        local_ver = "26.9.1",
+                        local_ver = ServerVersion,
                         local_sha = "4f2c9a1b7e",
                         local_date = "1759320000",
                         local_branch = "master",
@@ -852,14 +858,14 @@ internal sealed partial class DemoFleet
             sysContact = "netops@example.net",
             sysObjectID = ".1.3.6.1.4.1.9.1.2494",
             serial = d.Serial,
-            inserted = Stamp(_now.AddDays(-400 + d.Id)),
+            inserted = Stamp(_now.AddDays(-400 + d.Id % 365)),
             last_discovered = Stamp(_now.AddHours(-3).AddMinutes(-d.Id)),
             last_polled = Stamp(_now.AddMinutes(-1)),
             last_polled_timetaken = 4.2 + d.Id % 5,
             status = d.Up ? 1 : 0,
             disabled = d.Disabled ? 1 : 0,
             ignore = 0,
-            uptime = d.Up ? 18_489_600L + d.Id * 86_400L : 0L,
+            uptime = d.Up ? 18_489_600L + d.Id % 365 * 86_400L : 0L,
             poller_group = 0,
         };
     }
@@ -876,7 +882,7 @@ internal sealed partial class DemoFleet
         ifSpeed = p.Speed,
         ifDuplex = "fullDuplex",
         ifMtu = 9216,
-        ifPhysAddress = "02:00:5e:" + (p.Id / 256 % 256).ToString("x2", CultureInfo.InvariantCulture) + ":" + (p.Id % 256).ToString("x2", CultureInfo.InvariantCulture) + ":01",
+        ifPhysAddress = "02:00:5e:" + (p.Id / 256 % 256).ToString("x2", CultureInfo.InvariantCulture) + ":" + (p.Id % 256).ToString("x2", CultureInfo.InvariantCulture) + ":" + ((p.Id >> 16) + 1).ToString("x2", CultureInfo.InvariantCulture),
         ifOperStatus = p.Up ? "up" : "down",
         ifAdminStatus = "up",
         ifInOctets_rate = p.Speed / 8.0 * p.Load,

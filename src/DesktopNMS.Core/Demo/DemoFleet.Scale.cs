@@ -60,7 +60,8 @@ internal sealed partial class DemoFleet
         for (var n = 0; n < scaled.Count; n++)
         {
             var d = scaled[n];
-            AddScaledSensor(d, "temperature", "Inlet", 28 + random.Next(0, 45), 70, 60);
+            // One switch in fifty runs hot, so Health and the sensor alerts have something to show.
+            AddScaledSensor(d, "temperature", "Inlet", n % 50 == 0 ? 74 : 28 + random.Next(0, 30), 70, 60);
             AddScaledSensor(d, "fanspeed", "Fan 1", 3000 + random.Next(0, 3000), 9000, 8000, 1000, 1500);
 
             // A chain, each switch's second uplink to the next one's first.

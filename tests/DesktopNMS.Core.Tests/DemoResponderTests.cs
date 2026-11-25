@@ -17,9 +17,8 @@ public sealed class DemoResponderTests : IDisposable
 
     public DemoResponderTests()
     {
-        _transport.UseHandler(() => new DemoMessageHandler(_demo));
         _client = new LibreNmsClient(_transport, NullLogger<LibreNmsClient>.Instance);
-        _client.Connect(new LibreNmsConnection(DemoResponder.Address, DemoResponder.Token));
+        _client.Connect(_demo.Connection());
     }
 
     public void Dispose()
@@ -142,8 +141,7 @@ public sealed class DemoResponderTests : IDisposable
     {
         var big = new DemoResponder(new DemoFleetOptions(ExtraDevices: 2000), new FixedTime());
         var same = new DemoResponder(new DemoFleetOptions(ExtraDevices: 2000), new FixedTime());
-        _transport.UseHandler(() => new DemoMessageHandler(big));
-        _client.Connect(new LibreNmsConnection(DemoResponder.Address, DemoResponder.Token));
+        _client.Connect(big.Connection());
 
         var devices = await _client.Devices.ListAsync();
         var ports = await _client.Ports.ListAllStatusAsync();
@@ -155,6 +153,70 @@ public sealed class DemoResponderTests : IDisposable
         Assert.Equal(big.Respond("GET", "/api/v0/alerts").Body, same.Respond("GET", "/api/v0/alerts").Body);
         Assert.Equal(24, new DemoResponder().DeviceCount);
         Assert.Throws<ArgumentOutOfRangeException>(() => new DemoResponder(new DemoFleetOptions(ExtraDevices: -1)));
+    }
+
+    [Fact]
+    public void A_larger_fleet_leaves_the_default_network_as_it_is_and_keeps_its_switches_within_limits()
+    {
+        var big = new DemoResponder(new DemoFleetOptions(ExtraDevices: 500), new FixedTime());
+        using var all = JsonDocument.Parse(big.Respond("GET", "/api/v0/devices").Body);
+        using var sensors = JsonDocument.Parse(big.Respond("GET", "/api/v0/resources/sensors").Body);
+        var defaultIds = Enumerable.Range(1, 24).ToHashSet();
+
+        // The default devices, their sensors and their alerts answer exactly as without the extra switches.
+        Assert.Equal(Only(_demo, "/api/v0/devices", "devices", defaultIds), Only(big, "/api/v0/devices", "devices", defaultIds));
+        Assert.Equal(Only(_demo, "/api/v0/resources/sensors", "sensors", defaultIds), Only(big, "/api/v0/resources/sensors", "sensors", defaultIds));
+        Assert.Equal(_demo.PinnedSensors, big.PinnedSensors);
+
+        var extra = sensors.RootElement.GetProperty("sensors").EnumerateArray().Where(s => s.GetProperty("device_id").GetInt32() > 24).ToList();
+        Assert.Equal(1000, extra.Count);
+        var over = extra.Where(s => s.GetProperty("sensor_current").ValueKind == JsonValueKind.Number
+            && s.GetProperty("sensor_current").GetDouble() >= s.GetProperty("sensor_limit").GetDouble()).ToList();
+        Assert.InRange(over.Count, 1, 10);
+        Assert.All(over, s => Assert.Equal("Inlet", s.GetProperty("sensor_descr").GetString()));
+        Assert.All(all.RootElement.GetProperty("devices").EnumerateArray(),
+            d => Assert.True(string.CompareOrdinal(d.GetProperty("inserted").GetString(), "2026-11-02") < 0));
+        Assert.Equal(
+            big.Respond("GET", "/api/v0/ports").Body.Split("ifPhysAddress").Length - 1,
+            JsonDocument.Parse(big.Respond("GET", "/api/v0/ports").Body).RootElement.GetProperty("ports").EnumerateArray().Select(p => p.GetProperty("ifPhysAddress").GetString()).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task The_connection_test_answers_from_the_demo_too()
+    {
+        var result = await _client.TestAsync(_demo.Connection());
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(DemoResponder.ServerVersion, result.SystemInfo!.LocalVersion);
+    }
+
+    [Fact]
+    public void A_connection_keeps_its_handler_through_a_new_timeout_or_certificate_and_another_never_has_one()
+    {
+        var demo = _demo.Connection();
+
+        Assert.NotNull(demo.WithTimeout(60).Handler);
+        Assert.NotNull(demo.WithTrustedCertificate("AB").Handler);
+        Assert.Null(new LibreNmsConnection(DemoResponder.Address, DemoResponder.Token).Handler);
+        Assert.Null(demo.WithHandler(null).Handler);
+    }
+
+    [Fact]
+    public async Task Requests_can_be_answered_at_once()
+    {
+        var answers = await Task.WhenAll(Enumerable.Range(0, 64).Select(i => Task.Run(() => _demo.Respond("GET", i % 2 == 0 ? "/api/v0/devices" : "/api/v0/devices/1/graphs/device_bits?width=300&height=120"))));
+
+        Assert.All(answers, answer => Assert.Equal(200, answer.Status));
+        Assert.Single(answers.Where((_, i) => i % 2 == 0).Select(a => a.Body).Distinct());
+    }
+
+    private static List<string> Only(DemoResponder demo, string path, string property, HashSet<int> deviceIds)
+    {
+        using var json = JsonDocument.Parse(demo.Respond("GET", path).Body);
+        return json.RootElement.GetProperty(property).EnumerateArray()
+            .Where(item => deviceIds.Contains(item.GetProperty("device_id").GetInt32()))
+            .Select(item => item.GetRawText())
+            .ToList();
     }
 
     [Fact]

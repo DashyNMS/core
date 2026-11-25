@@ -11,7 +11,7 @@ namespace DesktopNMS.Core.Demo;
 /// do. A smooth day of made-up but plausible data, the same for the same
 /// request, with times along the bottom from the fleet's own clock.
 /// </summary>
-internal sealed class DemoGraphs(DateTime localNow)
+internal sealed class DemoGraphs(TimeProvider time)
 {
     private const string Black = "rgb(0%, 0%, 0%)";
     private const string MinorGrid = "rgb(64.705882%, 64.705882%, 64.705882%)";
@@ -122,7 +122,7 @@ internal sealed class DemoGraphs(DateTime localNow)
         foreach (var hour in new[] { 0, 6, 12, 18, 24 })
         {
             var x = Left + plotW * hour / 24.0;
-            var text = localNow.AddHours(hour - 24).ToString("HH:00", CultureInfo.InvariantCulture);
+            var text = time.GetLocalNow().DateTime.AddHours(hour - 24).ToString("HH:00", CultureInfo.InvariantCulture);
             svg.Append(CultureInfo.InvariantCulture, $"<text x=\"{x:0.#}\" y=\"{bottom + 13}\" font-family=\"DejaVu Sans Mono, Consolas, monospace\" font-size=\"9\" text-anchor=\"middle\" fill=\"{Black}\">{text}</text>\n");
         }
 
