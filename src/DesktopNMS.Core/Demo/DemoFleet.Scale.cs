@@ -61,7 +61,8 @@ internal sealed partial class DemoFleet
         {
             var d = scaled[n];
             // One switch in fifty runs hot, so Health and the sensor alerts have something to show.
-            AddScaledSensor(d, "temperature", "Inlet", n % 50 == 0 ? 74 : 28 + random.Next(0, 30), 70, 60);
+            var hot = n % 50 == 0 && d.Up;
+            AddScaledSensor(d, "temperature", "Inlet", hot ? 74 : 28 + random.Next(0, 30), 70, 60);
             AddScaledSensor(d, "fanspeed", "Fan 1", 3000 + random.Next(0, 3000), 9000, 8000, 1000, 1500);
 
             // A chain, each switch's second uplink to the next one's first.
@@ -85,9 +86,10 @@ internal sealed partial class DemoFleet
                 sysName = d.Name,
             });
 
-            if (!d.Up || n % 40 == 0)
+            if (!d.Up || hot || n % 40 == 0)
             {
-                var ruleId = d.Up ? 3 : 1;
+                // Down, then over its limit, then port errors, as the rules are numbered.
+                var ruleId = !d.Up ? 1 : hot ? 2 : 3;
                 var rule = _rules[ruleId - 1];
                 _alerts.Add(new
                 {

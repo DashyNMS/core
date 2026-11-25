@@ -119,10 +119,12 @@ internal sealed class DemoGraphs(TimeProvider time)
             svg.Append(CultureInfo.InvariantCulture, $"<text x=\"{Left - 6}\" y=\"{y + 3:0.#}\" font-family=\"DejaVu Sans Mono, Consolas, monospace\" font-size=\"9\" text-anchor=\"end\" fill=\"{Black}\">{label}</text>\n");
         }
 
+        // Read once, so every label belongs to the same hour.
+        var now = time.GetLocalNow().DateTime;
         foreach (var hour in new[] { 0, 6, 12, 18, 24 })
         {
             var x = Left + plotW * hour / 24.0;
-            var text = time.GetLocalNow().DateTime.AddHours(hour - 24).ToString("HH:00", CultureInfo.InvariantCulture);
+            var text = now.AddHours(hour - 24).ToString("HH:00", CultureInfo.InvariantCulture);
             svg.Append(CultureInfo.InvariantCulture, $"<text x=\"{x:0.#}\" y=\"{bottom + 13}\" font-family=\"DejaVu Sans Mono, Consolas, monospace\" font-size=\"9\" text-anchor=\"middle\" fill=\"{Black}\">{text}</text>\n");
         }
 

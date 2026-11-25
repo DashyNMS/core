@@ -157,7 +157,11 @@ internal sealed partial class DemoFleet
 
                 if (parts.Length >= 5 && int.TryParse(parts[4], out var prefix) && IPAddress.TryParse(q, out var network))
                 {
-                    return Collection("arp", _arp.Where(a => InNetwork(Ip(a), network, prefix)));
+                    // A prefix wider than the address family is LibreNMS's validation error, not every row.
+                    var bits = network.GetAddressBytes().Length * 8;
+                    return prefix < 0 || prefix > bits
+                        ? Fail(422, "Invalid network prefix")
+                        : Collection("arp", _arp.Where(a => InNetwork(Ip(a), network, prefix)));
                 }
 
                 return q.Contains(':')
@@ -169,6 +173,9 @@ internal sealed partial class DemoFleet
 
             case "networks" when parts.Length == 4:
                 return Fail(404, "IPv6 Networks do not exist");
+
+            case "networks" when parts.Length == 5 && parts[4] == "ip" && !Networks().Any(n => n.Id.ToString(CultureInfo.InvariantCulture) == parts[3]):
+                return Fail(404, "IP network does not exist");
 
             case "networks" when parts.Length == 5 && parts[4] == "ip" && Networks().FirstOrDefault(n => n.Id.ToString(CultureInfo.InvariantCulture) == parts[3]) is { Cidr: not null } net:
                 var (baseText, prefixText) = (net.Cidr.Split('/')[0], net.Cidr.Split('/')[1]);
@@ -232,9 +239,13 @@ internal sealed partial class DemoFleet
                 }));
         }
 
-        return int.TryParse(parts[1], out var id)
-            ? Ok(new Dictionary<string, object?> { ["port"] = _ports.Where(p => p.Id == id).Select(PortJson).ToList() })
-            : Collection("ports", _ports.Select(PortJson));
+        if (!int.TryParse(parts[1], out var id))
+        {
+            return Collection("ports", _ports.Select(PortJson));
+        }
+
+        var found = _ports.Where(p => p.Id == id).Select(PortJson).ToList();
+        return found.Count == 0 ? Fail(404, "Port does not exist") : Ok(new Dictionary<string, object?> { ["port"] = found });
     }
 
     // ------------------------------------------------------------ routing
@@ -362,7 +373,8 @@ internal sealed partial class DemoFleet
 
     private DemoResponse DeviceRoute(string[] parts, IReadOnlyDictionary<string, string> query)
     {
-        var device = _devices.FirstOrDefault(d => d.Id.ToString(CultureInfo.InvariantCulture) == parts[1] || d.Name == parts[1]);
+        // By id, name or the hostname the device list gives, as LibreNMS accepts each.
+        var device = _devices.FirstOrDefault(d => d.Id.ToString(CultureInfo.InvariantCulture) == parts[1] || d.Name == parts[1] || d.Name + ".example.net" == parts[1]);
         if (device is null)
         {
             return Fail(404, "Device does not exist");
@@ -966,7 +978,10 @@ internal sealed partial class DemoFleet
     }
 
     private static DemoResponse Collection(string property, IEnumerable<object> items)
-        => Ok(new Dictionary<string, object?> { [property] = items.ToList(), ["count"] = items.Count() });
+    {
+        var list = items.ToList();
+        return Ok(new Dictionary<string, object?> { [property] = list, ["count"] = list.Count });
+    }
 
     private static DemoResponse Ok(Dictionary<string, object?> fields, bool unhandled = false)
     {

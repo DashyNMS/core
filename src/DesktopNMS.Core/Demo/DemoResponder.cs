@@ -2,9 +2,9 @@ namespace DesktopNMS.Core.Demo;
 
 /// <summary>
 /// A stand-in LibreNMS for demo mode (#119): an example network that answers
-/// the API the apps use, in LibreNMS's own shapes, without a server. Desktop
-/// carries it over a loopback listener, Mobile through
-/// <see cref="DemoMessageHandler"/> in the same process.
+/// the API the apps use, in LibreNMS's own shapes, without a server. A host
+/// can carry it in the same process with <see cref="Connection"/>, or put it
+/// behind a listener of its own.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,7 +19,8 @@ namespace DesktopNMS.Core.Demo;
 /// device, port, FDB or network entry is LibreNMS's 404 with its message.
 /// Writes (anything but GET) are accepted and forgotten: nothing a demo does
 /// changes it. Anything else gets an empty success, marked
-/// <see cref="DemoResponse.Unhandled"/>.
+/// <see cref="DemoResponse.Unhandled"/>. A path LibreNMS would reject, such as
+/// a malformed id, answers 400, also marked unhandled.
 /// </para>
 /// <para>
 /// The graph contract: <c>devices/{id}/graphs/…</c> and

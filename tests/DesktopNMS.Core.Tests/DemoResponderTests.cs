@@ -104,6 +104,10 @@ public sealed class DemoResponderTests : IDisposable
     [InlineData("/api/v0/not-a-thing", 200, true)]
     [InlineData("/elsewhere", 404, false)]
     [InlineData("/api/v0/devices/1/health/processor/notanumber", 400, true)]
+    [InlineData("/api/v0/ports/999999", 404, false)]
+    [InlineData("/api/v0/resources/ip/networks/999/ip", 404, false)]
+    [InlineData("/api/v0/resources/ip/arp/192.0.2.0/-1", 422, false)]
+    [InlineData("/api/v0/devices/core-sw-01.example.net", 200, false)]
     public void Unknown_paths_answer_as_LibreNMS_would_and_say_so(string path, int status, bool unhandled)
     {
         var answer = _demo.Respond("GET", path);
@@ -173,6 +177,8 @@ public sealed class DemoResponderTests : IDisposable
         var over = extra.Where(s => s.GetProperty("sensor_current").ValueKind == JsonValueKind.Number
             && s.GetProperty("sensor_current").GetDouble() >= s.GetProperty("sensor_limit").GetDouble()).ToList();
         Assert.InRange(over.Count, 1, 10);
+        using var alerts = JsonDocument.Parse(big.Respond("GET", "/api/v0/alerts").Body);
+        Assert.Equal(over.Count, alerts.RootElement.GetProperty("alerts").EnumerateArray().Count(a => a.GetProperty("rule_id").GetInt32() == 2 && a.GetProperty("device_id").GetInt32() > 24));
         Assert.All(over, s => Assert.Equal("Inlet", s.GetProperty("sensor_descr").GetString()));
         Assert.All(all.RootElement.GetProperty("devices").EnumerateArray(),
             d => Assert.True(string.CompareOrdinal(d.GetProperty("inserted").GetString(), "2026-11-02") < 0));
@@ -208,8 +214,10 @@ public sealed class DemoResponderTests : IDisposable
         _client.TrustCertificate("AB");
         Assert.Equal(24, (await _client.Devices.ListAsync()).Count);
 
-        _client.Connect(new LibreNmsConnection(new Uri("https://unreachable.invalid/"), "x", timeoutSeconds: 5));
-        await Assert.ThrowsAsync<LibreNmsApiException>(() => _client.Devices.ListAsync());
+        // Another connection, answered by another in-process network, gets that one's answers.
+        var bigger = new DemoResponder(new DemoFleetOptions(ExtraDevices: 10), new FixedTime());
+        _client.Connect(bigger.Connection());
+        Assert.Equal(34, (await _client.Devices.ListAsync()).Count);
 
         Assert.Null(new LibreNmsConnection(DemoResponder.Address, "x", backupWebRoot: new Uri("https://backup.example.net/")).WithHandler(() => new DemoMessageHandler(_demo)).BackupWebRoot);
     }
@@ -217,10 +225,12 @@ public sealed class DemoResponderTests : IDisposable
     [Fact]
     public async Task Requests_can_be_answered_at_once()
     {
-        var answers = await Task.WhenAll(Enumerable.Range(0, 64).Select(i => Task.Run(() => _demo.Respond("GET", i % 2 == 0 ? "/api/v0/devices" : "/api/v0/devices/1/graphs/device_bits?width=300&height=120"))));
+        var answers = await Task.WhenAll(Enumerable.Range(0, 64).Select(i => Task.Run(() => _demo.Respond("GET", i % 2 == 0 ? "/api/v0/devices" : "/api/v0/devices/1/device_bits?from=-1d&width=300&height=120"))));
 
         Assert.All(answers, answer => Assert.Equal(200, answer.Status));
         Assert.Single(answers.Where((_, i) => i % 2 == 0).Select(a => a.Body).Distinct());
+        Assert.All(answers.Where((_, i) => i % 2 == 1), answer => Assert.Equal("image/svg+xml", answer.ContentType));
+        Assert.Single(answers.Where((_, i) => i % 2 == 1).Select(a => a.Body).Distinct());
     }
 
     private static List<string> Only(DemoResponder demo, string path, string property, HashSet<int> deviceIds)
