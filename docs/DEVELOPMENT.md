@@ -83,7 +83,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 The same standard as every DashyNMS repository: `type(scope): what changes, in plain words`.
 
 - **Types:** `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
-- **Scopes:** `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`, `intelligence`.
+- **Scopes:** `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`, `intelligence`, `help`.
 - **The description:** lower-case start, no full stop, under about 72 characters.
 - **Issues:** issue titles use the same form, worded as the result the fix delivers.
 - **PRs:** one issue per PR, squash-merged, with `Closes #NN` in the description.
