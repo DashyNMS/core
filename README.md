@@ -162,3 +162,25 @@ Building, the edge, nightly and release builds, and the commit standard are in [
 
 <sub>DashyNMS isn't affiliated with LibreNMS, Graylog or Unimus, which are trademarks of their respective owners.<br>
 MIT licence: see [LICENSE](LICENSE).</sub>
+
+### Demo network
+
+`Demo.DemoResponder` is the example network the apps' demos show (#119): two dozen
+devices across four sites under `example.net`, in the documentation address ranges, with
+ports, sensors, neighbours, alerts, rules, events, graphs and Network Search data. It
+answers one request at a time, `Respond(method, pathAndQuery, body)`, with LibreNMS 26.9's
+JSON or an rrdtool-shaped SVG, as its remarks set out. `/faults` answers 404, so Core
+reads the example alerts from `/alerts`. Writes are accepted and forgotten.
+
+`Demo.DemoMessageHandler` answers HTTP requests from it in the same process, so the real
+transport and client run a demo with no listener: call `LibreNmsTransport.UseHandler`
+with it before connecting to `DemoResponder.Address` with `DemoResponder.Token`, and
+`UseHandler(null)` before connecting anywhere else. `DemoFleetOptions(ExtraDevices: n)`
+adds switches, addressed in `2001:db8::/32`, for measuring a large network; the same
+seed gives the same network. `PinnedDevices`, `RecentlyViewed`, `PinnedSensors` and
+`FeaturedDeviceId` are what a demo seeds its settings with.
+
+Desktop moves its demo onto it and keeps its listener as a thin wrapper. Mobile uses the
+handler for its demo (DashyNMS/mobile#160) and the larger fleet for its load test
+(DashyNMS/mobile#132). MCP isn't affected. This is an additive API in the next
+`2.0.0-edge.N` package.
