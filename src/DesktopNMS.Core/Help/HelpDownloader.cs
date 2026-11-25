@@ -17,14 +17,15 @@ internal sealed class HelpDownloader(HttpClient http, HelpProduct product, HelpR
     private const int MaxPageBytes = 512 * 1024;
     private const string Host = "raw.githubusercontent.com";
 
-    private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"];
+    private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
 
     private long _total;
 
+    /// <summary>Not SVG: it can hold scripts and addresses, and a downloaded one isn't worth trusting an app's renderer with.</summary>
     public static bool IsImage(string path) => ImageExtensions.Any(extension => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The guide's files, or null when this release has no guide. Throws when any part fails for another reason.</summary>
-    public async Task<HelpFileSet?> DownloadAsync(CancellationToken token)
+    public async Task<HelpFileSet?> DownloadAsync(HelpFileSet bundled, CancellationToken token)
     {
         const string start = HelpProduct.GuideFolder + "/README.md";
         var files = new Dictionary<string, byte[]>(StringComparer.Ordinal);
@@ -66,11 +67,16 @@ internal sealed class HelpDownloader(HttpClient http, HelpProduct product, HelpR
                             throw new InvalidDataException("The guide has too many pages.");
                         }
 
-                        // A page that isn't there is a broken link, not a failed download.
+                        // A page that isn't there is a broken link - unless the app was
+                        // built with it, when it's the download that's wrong.
                         if (await GetAsync(linked, MaxPageBytes, token).ConfigureAwait(false) is { } page)
                         {
                             files[linked] = page;
                             waiting.Enqueue(linked);
+                        }
+                        else if (bundled.Contains(linked))
+                        {
+                            throw new InvalidDataException("A page of the guide couldn't be downloaded.");
                         }
                     }
                 }

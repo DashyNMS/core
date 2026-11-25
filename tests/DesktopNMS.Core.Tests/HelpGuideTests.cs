@@ -247,6 +247,66 @@ public class HelpGuideTests
         Assert.Equal(new HelpBrokenLink("Nowhere"), guide.ResolveLink(guide.Home!, "Nowhere"));
     }
 
+    [Fact]
+    public void A_wikis_links_to_repository_files_are_read_at_the_running_release()
+    {
+        var guide = HelpGuide.Load(Product, HelpRelease.ForVersion("2.0.0"), Files(new Dictionary<string, string> { ["Home.md"] = "# Home" }));
+
+        Assert.Equal(new HelpExternalLink(new Uri("https://github.com/example/app/blob/v2.0.0/docs/a%20b.md#part")),
+            guide.ResolveLink(guide.Home!, "https://github.com/example/app/blob/main/docs/a%20b.md#part"));
+    }
+
+    [Fact]
+    public void Headings_keep_marks_of_their_own_and_lose_the_closing_ones()
+    {
+        var guide = HelpGuide.Load(Product, null, Files(new Dictionary<string, string>
+        {
+            ["docs/guide/README.md"] = "# Learning C#\n\n## Closed ##\n\n## Issue #12\n\n#not a heading\n\n####### nor this\n\n```inline``` then\n\n## After",
+        }));
+
+        Assert.Equal("Learning C#", guide.Home!.Title);
+        Assert.Equal(["Closed", "Issue #12", "After"], guide.Home.Headings.Select(heading => heading.Text));
+    }
+
+    [Fact]
+    public void Marks_shown_as_code_are_left_alone()
+    {
+        var guide = HelpGuide.Load(Product, null, Files(new Dictionary<string, string>
+        {
+            ["docs/guide/README.md"] = "# Guide\n\nUse `<!--` to start and `[[ -f x ]]` to test.\n\nStill here.",
+        }));
+
+        Assert.Contains("`[[ -f x ]]`", guide.Home!.Markdown);
+        Assert.Contains("Still here.", guide.Home.Markdown);
+    }
+
+    /// <summary>A page may have been downloaded: nothing in one may take more than a moment to read.</summary>
+    [Fact]
+    public void Strange_pages_are_read_quickly()
+    {
+        string[] lines =
+        [
+            "# a" + new string(' ', 100_000) + "b",
+            new string('[', 100_000),
+            string.Concat(Enumerable.Repeat("*a ", 30_000)),
+            string.Concat(Enumerable.Repeat("<a ", 30_000)),
+            new string('`', 100_000),
+            string.Concat(Enumerable.Repeat("` ", 1_500)),
+            string.Concat(Enumerable.Repeat("*a ", 1_300)),
+            string.Concat(Enumerable.Repeat("<a ", 1_300)),
+            new string('-', 4_000) + "x",
+            "|" + string.Concat(Enumerable.Repeat("--", 1_900)) + "x",
+            new string('[', 4_000),
+        ];
+        var page = string.Join("\n\n", lines.SelectMany(line => Enumerable.Repeat(line, 2)));
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var guide = HelpGuide.Load(Product, null, Files(new Dictionary<string, string> { ["docs/guide/README.md"] = "# Guide\n\n" + page }));
+
+        Assert.NotNull(guide.Home);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(20), watch.Elapsed.ToString());
+    }
+
     [Theory]
     [InlineData("How do I watch a widget?", "Watch-a-widget", null)]
     [InlineData("unpinning", "Watch-a-widget", "stop-watching")]
@@ -268,6 +328,26 @@ public class HelpGuideTests
     public void Search_finds_nothing_rather_than_guessing(string query)
     {
         Assert.Empty(Guide().Search(query));
+    }
+
+    [Fact]
+    public void A_word_in_one_pages_title_does_not_fill_the_results_with_that_page()
+    {
+        var guide = HelpGuide.Load(Product, null, Files(new Dictionary<string, string>
+        {
+            ["docs/guide/README.md"] = "# Guide",
+            ["docs/guide/a.md"] = "# Gadgets\n\nAbout them.\n\n## One\n\nText.\n\n## Two\n\nText.\n\n## Three\n\nText.",
+            ["docs/guide/b.md"] = "# Elsewhere\n\n## Part\n\nThe gadget and another gadget.",
+        }));
+
+        Assert.Equal(["Gadgets", "Elsewhere"], guide.Search("gadgets").Take(2).Select(result => result.Page.Id));
+    }
+
+    [Fact]
+    public void A_word_still_being_typed_finds_its_page()
+    {
+        Assert.Equal("Troubleshooting", Guide().Search("certifica")[0].Page.Id);
+        Assert.Equal("Watch-a-widget", Guide().Search("the watchi")[0].Page.Id);
     }
 
     [Fact]

@@ -129,7 +129,8 @@ affected. This is a non-breaking fix in the 2.0 development stream.
 ### In-app help
 
 `Help.HelpGuide` reads a user guide for use inside an app (#96), from a repository's
-`docs/guide` or the wiki copied from it. It gives the pages, the contents list, each
+`docs/guide` or the wiki copied from it (which
+can be bundled but isn't what a refresh reads, and needs the images it shows bundled too). It gives the pages, the contents list, each
 page's headings and search, and works out where links and images go:
 `HelpPageLink` (stay in the app), `HelpExternalLink` (open the browser) or
 `HelpBrokenLink` (open nothing). Images come only from the guide's own files. Core

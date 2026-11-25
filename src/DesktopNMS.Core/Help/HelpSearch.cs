@@ -66,7 +66,8 @@ internal sealed partial class HelpSearchIndex
 
     public IReadOnlyList<HelpSearchResult> Search(string query, int limit)
     {
-        var all = Words(query).Distinct(StringComparer.Ordinal).ToList();
+        // Distinct by last use, so the word being typed stays last.
+        var all = Words(query).Reverse().Distinct(StringComparer.Ordinal).Reverse().ToList();
         var terms = all.Where(term => !Ignored.Contains(term)).Take(MaxTerms).ToList();
         if (terms.Count == 0)
         {
@@ -79,10 +80,12 @@ internal sealed partial class HelpSearchIndex
         }
 
         // While someone types, the last word is still a beginning: "acknowl".
-        var last = terms[^1];
-        var isTyping = last.Length >= 3 && query.Length > 0 && char.IsLetterOrDigit(query[^1]) && !_documents.ContainsKey(last);
+        // Its ending may be part of one that's taken off, so "scheduli" also meets "schedul".
+        var last = char.IsLetterOrDigit(query[^1]) ? all[^1] : string.Empty;
+        var isTyping = last.Length >= 3 && terms.Contains(last) && !_documents.ContainsKey(last);
         var endings = isTyping
-            ? _documents.Keys.Where(word => word.StartsWith(last, StringComparison.Ordinal)).OrderBy(word => word.Length).Take(8).ToList()
+            ? _documents.Keys.Where(word => word.StartsWith(last, StringComparison.Ordinal) || (word.Length >= 4 && last.StartsWith(word, StringComparison.Ordinal)))
+                .OrderBy(word => Math.Abs(word.Length - last.Length)).Take(8).ToList()
             : [];
 
         var weights = terms.ToDictionary(term => term, Weight, StringComparer.Ordinal);
@@ -102,7 +105,7 @@ internal sealed partial class HelpSearchIndex
 
                 var weight = weights[term];
                 matched += weight;
-                score += weight * ((entry.Title.Contains(found) ? 5 : 0) + (entry.Heading.Contains(found) ? 4 : 0)
+                score += weight * ((!entry.Title.Contains(found) ? 0 : entry.Section.Heading is null ? 5 : 1) + (entry.Heading.Contains(found) ? 4 : 0)
                     + Math.Min(entry.Body.GetValueOrDefault(found), 4) * 0.75);
             }
 

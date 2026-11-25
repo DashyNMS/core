@@ -15,6 +15,14 @@ public enum HelpGuideSource
     Downloaded,
 }
 
+/// <summary>The guide being shown, and where it came from.</summary>
+/// <param name="TakenAt">When a downloaded copy was taken; null for the bundled snapshot.</param>
+public sealed record HelpShownGuide(HelpGuide Guide, HelpGuideSource Source, DateTimeOffset? TakenAt)
+{
+    /// <summary>What its files hold, to tell a new download from the same one again. Null for the bundled snapshot.</summary>
+    internal string? Fingerprint { get; init; }
+}
+
 /// <summary>How a refresh went.</summary>
 public enum HelpRefreshOutcome
 {
@@ -54,14 +62,19 @@ public enum HelpRefreshOutcome
 /// </remarks>
 public sealed class HelpGuideService : IDisposable
 {
-    /// <summary>A tag doesn't change, so a copy is only checked again for one that was moved.</summary>
-    public static readonly TimeSpan RefreshInterval = TimeSpan.FromDays(7);
+    /// <summary>A tag hardly ever changes, so a copy is only fetched again in case one was moved.</summary>
+    public static readonly TimeSpan RefreshInterval = TimeSpan.FromDays(30);
 
     /// <summary>How long after a failure before the next try that isn't forced.</summary>
     public static readonly TimeSpan RetryInterval = TimeSpan.FromMinutes(15);
 
+    /// <summary>The longest a whole refresh may take, so a slow server can't hold one open.</summary>
+    private static readonly TimeSpan DownloadLimit = TimeSpan.FromMinutes(3);
+
     private const string ManifestName = "snapshot.json";
     private const string FilesFolder = "files";
+    private const string TempSuffix = ".tmp";
+    private static readonly TimeSpan AbandonedAfter = TimeSpan.FromHours(1);
     private const int MaxManifestBytes = 256 * 1024;
 
     private readonly HelpFileSet _bundled;
@@ -71,12 +84,10 @@ public sealed class HelpGuideService : IDisposable
     private readonly TimeProvider _time;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _stopping = new();
-    private State _state;
+    private HelpShownGuide _state;
     private DateTimeOffset? _nextTry;
     private bool _loaded;
     private int _disposed;
-
-    private sealed record State(HelpGuide Guide, HelpGuideSource Source, DateTimeOffset? TakenAt, string? Fingerprint);
 
     private sealed record Manifest(int Schema, string Product, string Reference, string Version, DateTimeOffset TakenAt, Dictionary<string, string> Files);
 
@@ -86,6 +97,12 @@ public sealed class HelpGuideService : IDisposable
     /// <param name="http">Shared client, or null for one of its own. It must not follow redirects or add headers that identify anyone.</param>
     public HelpGuideService(HelpProduct product, HelpRelease? release, HelpFileSet bundled, string? cacheDirectory = null, HttpClient? http = null, TimeProvider? time = null)
     {
+        // It names a folder.
+        if (product.Id.Length == 0 || !product.Id.All(character => char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character == '-'))
+        {
+            throw new ArgumentException("A help product's id is lower-case letters, digits and hyphens.", nameof(product));
+        }
+
         Product = product;
         Release = release;
         _bundled = bundled;
@@ -94,20 +111,23 @@ public sealed class HelpGuideService : IDisposable
         _http = http ?? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(30) };
         _time = time ?? TimeProvider.System;
         var guide = HelpGuide.Load(product, release, bundled);
-        _state = new State(guide, HelpGuideSource.Bundled, null, null);
+        _state = new HelpShownGuide(guide, HelpGuideSource.Bundled, null);
     }
 
     public HelpProduct Product { get; }
 
     public HelpRelease? Release { get; }
 
-    /// <summary>The guide to show now.</summary>
-    public HelpGuide Current => Volatile.Read(ref _state).Guide;
+    /// <summary>The guide to show now, with where it came from, read together.</summary>
+    public HelpShownGuide Shown => Volatile.Read(ref _state);
 
-    public HelpGuideSource Source => Volatile.Read(ref _state).Source;
+    /// <summary>The guide to show now.</summary>
+    public HelpGuide Current => Shown.Guide;
+
+    public HelpGuideSource Source => Shown.Source;
 
     /// <summary>When a downloaded copy was taken; null for the bundled snapshot.</summary>
-    public DateTimeOffset? TakenAt => Volatile.Read(ref _state).TakenAt;
+    public DateTimeOffset? TakenAt => Shown.TakenAt;
 
     /// <summary><see cref="Current"/> is now a different guide. Raised on the thread that did the work.</summary>
     public event EventHandler? Changed;
@@ -162,11 +182,12 @@ public sealed class HelpGuideService : IDisposable
         finally
         {
             _gate.Release();
-        }
 
-        if (changed)
-        {
-            Changed?.Invoke(this, EventArgs.Empty);
+            // Also when it was cancelled part way: a saved copy may be in use by then.
+            if (changed)
+            {
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         return outcome;
@@ -183,9 +204,11 @@ public sealed class HelpGuideService : IDisposable
             return (HelpRefreshOutcome.NotDue, false);
         }
 
+        using var limited = CancellationTokenSource.CreateLinkedTokenSource(token);
+        limited.CancelAfter(DownloadLimit);
         try
         {
-            var files = await new HelpDownloader(_http, Product, Release!).DownloadAsync(token).ConfigureAwait(false);
+            var files = await new HelpDownloader(_http, Product, Release!).DownloadAsync(_bundled, limited.Token).ConfigureAwait(false);
             if (files is null)
             {
                 _nextTry = now + RefreshInterval;
@@ -202,11 +225,12 @@ public sealed class HelpGuideService : IDisposable
             await SaveAsync(files, now, token).ConfigureAwait(false);
             _nextTry = null;
             var same = fingerprint == (state.Fingerprint ?? BundledFingerprint(files));
-            Volatile.Write(ref _state, new State(guide, HelpGuideSource.Downloaded, now, fingerprint));
+            Volatile.Write(ref _state, new HelpShownGuide(guide, HelpGuideSource.Downloaded, now) { Fingerprint = fingerprint });
             return (same ? HelpRefreshOutcome.Unchanged : HelpRefreshOutcome.Updated, !same);
         }
-        catch (Exception ex) when (IsExpected(ex) && !token.IsCancellationRequested)
+        catch (Exception ex) when (IsExpected(ex))
         {
+            token.ThrowIfCancellationRequested();
             _nextTry = now + RetryInterval;
             return (HelpRefreshOutcome.Failed, false);
         }
@@ -269,15 +293,17 @@ public sealed class HelpGuideService : IDisposable
                     {
                         var fingerprint = Fingerprint(set);
                         var differs = fingerprint != BundledFingerprint(set);
-                        Volatile.Write(ref _state, new State(guide, HelpGuideSource.Downloaded, manifest.TakenAt, fingerprint));
+                        Volatile.Write(ref _state, new HelpShownGuide(guide, HelpGuideSource.Downloaded, manifest.TakenAt) { Fingerprint = fingerprint });
                         _loaded = true;
                         return differs;
                     }
                 }
             }
         }
-        catch (Exception ex) when (IsExpected(ex) && !token.IsCancellationRequested)
+        catch (Exception ex) when (IsExpected(ex))
         {
+            token.ThrowIfCancellationRequested();
+
             // Not usable: the bundled guide stays, and a refresh replaces the copy.
         }
 
@@ -315,9 +341,11 @@ public sealed class HelpGuideService : IDisposable
     {
         try
         {
-            foreach (var file in Directory.EnumerateFiles(Path.Combine(folder, FilesFolder)).Where(file => !wanted.Contains(Path.GetFileName(file))))
+            // Not a file another copy of the app is writing now.
+            foreach (var file in new DirectoryInfo(Path.Combine(folder, FilesFolder)).EnumerateFiles().Where(file => !wanted.Contains(file.Name)
+                && (!file.Name.EndsWith(TempSuffix, StringComparison.Ordinal) || _time.GetUtcNow() - file.LastWriteTimeUtc > AbandonedAfter)))
             {
-                File.Delete(file);
+                file.Delete();
             }
 
             foreach (var other in Directory.EnumerateDirectories(_directory!).Where(other => !string.Equals(Path.GetFileName(other), Path.GetFileName(folder), StringComparison.OrdinalIgnoreCase)))
@@ -340,7 +368,7 @@ public sealed class HelpGuideService : IDisposable
     private static async Task WriteAsync(string path, byte[] content, CancellationToken token)
     {
         // Written beside it, then moved into place, so a reader never sees half a file.
-        var temporary = path + "." + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) + ".tmp";
+        var temporary = path + "." + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) + TempSuffix;
         try
         {
             await File.WriteAllBytesAsync(temporary, content, token).ConfigureAwait(false);
@@ -379,7 +407,7 @@ public sealed class HelpGuideService : IDisposable
     private static bool IsHash(string? text) => text is { Length: 64 } && text.All(character => char.IsAsciiHexDigitLower(character));
 
     private static bool IsExpected(Exception ex)
-        => ex is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or JsonException or OperationCanceledException or NotSupportedException;
+        => ex is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or JsonException or OperationCanceledException or NotSupportedException or ObjectDisposedException;
 
     public void Dispose()
     {

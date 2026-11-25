@@ -153,11 +153,50 @@ public sealed class HelpGuideServiceTests : IDisposable
     public async Task A_missing_page_is_a_broken_link_and_the_rest_is_kept()
     {
         _server.Files.Remove("docs/guide/reference/troubleshooting.md");
-        using var service = Service();
+        using var service = Service(bundled: HelpGuideTests.Files(HelpGuideTests.Pages.Where(page => !page.Key.Contains("troubleshooting", StringComparison.Ordinal))));
 
         Assert.Equal(HelpRefreshOutcome.Updated, await service.RefreshAsync());
         Assert.Equal(new HelpBrokenLink("reference/troubleshooting.md"), service.Current.ResolveLink(service.Current.Home!, "reference/troubleshooting.md"));
     }
+
+    [Fact]
+    public async Task A_download_without_a_page_the_app_was_built_with_is_not_used()
+    {
+        _server.Files.Remove("docs/guide/reference/troubleshooting.md");
+        using var service = Service();
+
+        Assert.Equal(HelpRefreshOutcome.Failed, await service.RefreshAsync());
+        Assert.Equal(HelpGuideSource.Bundled, service.Source);
+        Assert.NotNull(service.Current.Find("Troubleshooting"));
+    }
+
+    [Fact]
+    public async Task A_cancelled_refresh_still_announces_the_saved_copy_it_found()
+    {
+        _server.Files["docs/guide/reference/troubleshooting.md"] = Encoding.UTF8.GetBytes("# Troubleshooting\n\nNew advice.");
+        using (var first = Service())
+        {
+            await first.RefreshAsync();
+        }
+
+        using var second = Service();
+        using var cancelled = new CancellationTokenSource();
+        var raised = 0;
+        second.Changed += (_, _) => raised++;
+        _server.Asked = cancelled.Cancel;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.RefreshAsync(force: true, cancelled.Token));
+
+        Assert.Equal(1, raised);
+        Assert.Equal((HelpGuideSource.Downloaded, true), (second.Shown.Source, second.Shown.Guide == second.Current));
+    }
+
+    [Theory]
+    [InlineData("../outside")]
+    [InlineData("Desktop")]
+    [InlineData("")]
+    public void A_product_id_that_could_not_name_a_folder_is_refused(string id)
+        => Assert.Throws<ArgumentException>(() => new HelpGuideService(new HelpProduct(id, "Example", "example/app"), Release, HelpFileSet.Empty, _folder));
 
     [Fact]
     public async Task Links_out_of_the_guide_are_never_requested()
@@ -310,6 +349,8 @@ public sealed class HelpGuideServiceTests : IDisposable
 
         public string? Failing { get; set; }
 
+        public Action? Asked { get; set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (Offline)
@@ -317,6 +358,8 @@ public sealed class HelpGuideServiceTests : IDisposable
                 throw new HttpRequestException("No route to host.");
             }
 
+            Asked?.Invoke();
+            cancellationToken.ThrowIfCancellationRequested();
             var address = request.RequestUri!.ToString();
             Requests.Add(address);
             Agents.Add(request.Headers.UserAgent.ToString());

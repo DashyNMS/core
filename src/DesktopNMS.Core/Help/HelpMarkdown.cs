@@ -7,6 +7,13 @@ namespace DesktopNMS.Core.Help;
 /// <summary>The Markdown a guide uses, read just enough to find its titles, headings, links and words.</summary>
 internal static partial class HelpMarkdown
 {
+    /// <summary>
+    /// Longer than any line a person writes. A longer one is kept as plain
+    /// text: a page may have been downloaded, and the patterns below take
+    /// longer the longer the line.
+    /// </summary>
+    private const int MaxLineLength = 4096;
+
     /// <summary>Reads a page: its title comes from its first level-one heading, or <paramref name="title"/> when there's none, as on a wiki.</summary>
     public static (string? Title, string Markdown, IReadOnlyList<HelpHeading> Headings, IReadOnlyList<HelpSection> Sections) Read(string text)
     {
@@ -20,10 +27,9 @@ internal static partial class HelpMarkdown
 
         foreach (var (line, isCode) in Lines(WithoutComments(text)))
         {
-            if (!isCode && HeadingLine().Match(line) is { Success: true } match)
+            if (!isCode && TryHeading(line, out var level, out var heading))
             {
-                var level = match.Groups[1].Length;
-                var shown = Plain(match.Groups[2].Value);
+                var shown = Plain(heading);
                 var anchor = Anchor(shown, anchors);
                 if (level == 1 && title is null && headings.Count == 0)
                 {
@@ -38,7 +44,7 @@ internal static partial class HelpMarkdown
                 continue;
             }
 
-            if (!isCode && TagLine().IsMatch(line))
+            if (!isCode && line.Length <= MaxLineLength && TagLine().IsMatch(line))
             {
                 // The logo and centring tags on a front page. Apps draw their own.
                 continue;
@@ -71,6 +77,13 @@ internal static partial class HelpMarkdown
         foreach (var line in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
             var match = FenceLine().Match(line);
+            if (fence is null && match.Success && match.Groups[1].Value[0] == '`' && match.Groups[2].Value.Contains('`', StringComparison.Ordinal))
+            {
+                // ```code``` on one line is inline code, not the start of a block.
+                yield return (line, false);
+                continue;
+            }
+
             if (fence is null)
             {
                 if (match.Success)
@@ -96,7 +109,12 @@ internal static partial class HelpMarkdown
     /// <summary>Links and images in a line, outside inline code.</summary>
     public static IEnumerable<(bool IsImage, string Text, string Target)> Links(string line)
     {
-        foreach (Match match in LinkPattern().Matches(InlineCode().Replace(line, code => new string(' ', code.Length))))
+        if (line.Length > MaxLineLength)
+        {
+            yield break;
+        }
+
+        foreach (Match match in LinkPattern().Matches(WithoutCode(line)))
         {
             yield return (match.Groups[1].Length > 0, Unescape(match.Groups[2].Value), match.Groups[3].Value);
         }
@@ -104,9 +122,14 @@ internal static partial class HelpMarkdown
 
     /// <summary>A wiki's [[Page]] and [[Text|Page]] as ordinary links, so an app's renderer needs only one kind.</summary>
     public static string WithWikiLinks(string line)
-        => line.Contains("[[", StringComparison.Ordinal)
+        => line.Length <= MaxLineLength && WithoutCode(line) is var shown && shown.Contains("[[", StringComparison.Ordinal)
             ? WikiLink().Replace(line, match =>
             {
+                if (shown[match.Index] != '[')
+                {
+                    return match.Value;
+                }
+
                 var text = match.Groups[1].Value.Trim();
                 var page = match.Groups[2].Success ? match.Groups[2].Value.Trim() : text;
                 var (name, fragment) = SplitFragment(page);
@@ -127,6 +150,11 @@ internal static partial class HelpMarkdown
     /// <summary>One line's Markdown as the words a reader sees. What's in code marks is kept as written.</summary>
     public static string Plain(string markdown)
     {
+        if (markdown.Length > MaxLineLength)
+        {
+            return markdown.Trim();
+        }
+
         // Put aside first, so the stars in `MCP_DBM_*` aren't read as emphasis, then put back.
         var codes = new List<string>();
         var text = InlineCode().Replace(markdown, match =>
@@ -161,7 +189,7 @@ internal static partial class HelpMarkdown
                 continue;
             }
 
-            if (TableRule().IsMatch(line))
+            if (line.Length <= MaxLineLength && TableRule().IsMatch(line))
             {
                 continue;
             }
@@ -231,11 +259,13 @@ internal static partial class HelpMarkdown
                 continue;
             }
 
+            // A mark shown as code isn't one. Once inside a comment, nothing is code.
             var rest = line;
             var shown = new StringBuilder();
             while (rest.Length > 0)
             {
-                var mark = rest.IndexOf(inside ? "-->" : "<!--", StringComparison.Ordinal);
+                var mark = inside ? rest.IndexOf("-->", StringComparison.Ordinal)
+                    : (rest.Length <= MaxLineLength ? WithoutCode(rest) : rest).IndexOf("<!--", StringComparison.Ordinal);
                 if (mark < 0)
                 {
                     if (!inside)
@@ -264,33 +294,64 @@ internal static partial class HelpMarkdown
         return string.Join('\n', kept);
     }
 
-    private static string Unescape(string text) => Escape().Replace(text, "$1");
+    /// <summary>"## Find a device ##": the marks at the end count only after a space, so "C#" keeps its own.</summary>
+    private static bool TryHeading(string line, out int level, out string text)
+    {
+        (level, text) = (0, string.Empty);
+        var start = 0;
+        while (start < line.Length && start < 4 && line[start] == ' ')
+        {
+            start++;
+        }
 
-    [GeneratedRegex(@"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")]
-    private static partial Regex HeadingLine();
+        while (start + level < line.Length && line[start + level] == '#')
+        {
+            level++;
+        }
+
+        if (start > 3 || level is 0 or > 6 || start + level >= line.Length || line[start + level] is not (' ' or '\t'))
+        {
+            return false;
+        }
+
+        text = line[(start + level)..].Trim();
+        var unmarked = text.TrimEnd('#');
+        if (unmarked.Length == 0 || unmarked[^1] is ' ' or '\t')
+        {
+            text = unmarked.Trim();
+        }
+
+        return true;
+    }
+
+    /// <summary>The line with inline code blanked out, every other character where it was.</summary>
+    private static string WithoutCode(string line)
+        => line.Contains('`', StringComparison.Ordinal) ? InlineCode().Replace(line, code => new string(' ', code.Length)) : line;
+
+    private static string Unescape(string text) => Escape().Replace(text, "$1");
 
     [GeneratedRegex(@"^\s*(`{3,}|~{3,})(.*)$")]
     private static partial Regex FenceLine();
 
-    [GeneratedRegex(@"(!?)\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)\s>]+)>?(?:\s+""[^""]*"")?\s*\)")]
+    [GeneratedRegex(@"(!?)\[((?:\\.|[^\[\]\\])*)\]\(\s*<?([^)\s>]+)>?(?:\s+""[^""]*"")?\s*\)")]
     private static partial Regex LinkPattern();
 
-    [GeneratedRegex(@"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")]
+    [GeneratedRegex(@"\[\[([^\[\]|]+)(?:\|([^\[\]]+))?\]\]")]
     private static partial Regex WikiLink();
 
-    [GeneratedRegex(@"(?<!`)(`+)(?!`)(.*?[^`])\1(?!`)")]
+    [GeneratedRegex(@"(?<!`)(`{1,8})(?!`)(.{0,500}?[^`])\1(?!`)")]
     private static partial Regex InlineCode();
 
-    [GeneratedRegex(@"(\*\*|__|\*|(?<!\w)_)(?=\S)(.+?)(?<=\S)\1")]
+    [GeneratedRegex(@"(\*\*|__|\*|(?<!\w)_)(?=\S)(.{1,500}?)(?<=\S)\1")]
     private static partial Regex Emphasis();
 
-    [GeneratedRegex(@"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?/?>")]
+    [GeneratedRegex(@"</?[a-zA-Z][a-zA-Z0-9]{0,30}(?:\s[^<>]{0,500})?/?>")]
     private static partial Regex Tags();
 
-    [GeneratedRegex(@"^\s*(?:</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?/?>\s*)+$")]
+    [GeneratedRegex(@"^\s*(?:</?[a-zA-Z][a-zA-Z0-9]{0,30}(?:\s[^<>]{0,500})?/?>\s*)+$")]
     private static partial Regex TagLine();
 
-    [GeneratedRegex(@"^\s*\|?(?:\s*:?-{2,}:?\s*\|?)+\s*$")]
+    [GeneratedRegex(@"^\s*(?:\|\s*)?:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$")]
     private static partial Regex TableRule();
 
     [GeneratedRegex(@"^\s*(?:#{1,6}\s+|(?:>\s*)+|[-*+]\s+|\d+[.)]\s+)")]

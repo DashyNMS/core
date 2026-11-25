@@ -141,7 +141,7 @@ public sealed partial class HelpGuide
         }
 
         var (path, fragment) = HelpMarkdown.SplitFragment(target);
-        path = Decode(path);
+        path = Decode(WithoutQuery(path));
         if (HelpPaths.Combine(page.Path, path) is not { } resolved)
         {
             return new HelpBrokenLink(target);
@@ -157,7 +157,7 @@ public sealed partial class HelpGuide
         var isGuidePage = resolved.StartsWith(HelpProduct.GuideFolder + "/", StringComparison.Ordinal) || page.Path.IndexOf('/') < 0;
         return isGuidePage
             ? new HelpBrokenLink(target)
-            : new HelpExternalLink(new Uri($"https://github.com/{Product.Repository}/blob/{Release?.Reference ?? "main"}/{EscapePath(resolved)}{(fragment is null ? string.Empty : "#" + fragment)}"));
+            : RepositoryFile(resolved, fragment);
     }
 
     /// <summary>
@@ -169,7 +169,7 @@ public sealed partial class HelpGuide
     {
         target = target.Trim();
         var (path, _) = HelpMarkdown.SplitFragment(target);
-        var resolved = SchemePattern().IsMatch(target) ? RepositoryPath(target) : HelpPaths.Combine(page.Path, Decode(path));
+        var resolved = SchemePattern().IsMatch(target) ? RepositoryPath(target) : HelpPaths.Combine(page.Path, Decode(WithoutQuery(path)));
         return resolved is not null && _files.TryGet(resolved, out var content) ? new HelpImage(resolved, content) : null;
     }
 
@@ -213,8 +213,19 @@ public sealed partial class HelpGuide
             }
         }
 
+        // A file elsewhere in this repository, which a wiki links at its main
+        // branch: at this release instead, as it is for a relative link.
+        if (Release is not null && IsGitHub(address) && address.AbsolutePath.StartsWith($"/{Product.Repository}/blob/", StringComparison.OrdinalIgnoreCase)
+            && RepositoryPath(target) is { } file)
+        {
+            return RepositoryFile(file, fragment);
+        }
+
         return new HelpExternalLink(address);
     }
+
+    private HelpExternalLink RepositoryFile(string path, string? fragment)
+        => new(new Uri($"https://github.com/{Product.Repository}/blob/{Release?.Reference ?? "main"}/{EscapePath(path)}{(fragment is null ? string.Empty : "#" + fragment)}"));
 
     /// <summary>
     /// The repository path in one of this repository's GitHub addresses,
@@ -312,6 +323,8 @@ public sealed partial class HelpGuide
 
         return [.. groups.Where(group => group.Entries.Count > 0).Select(group => new HelpContentsGroup(group.Name, group.Entries))];
     }
+
+    private static string WithoutQuery(string path) => path.IndexOf('?') is var query and >= 0 ? path[..query] : path;
 
     private static string Decode(string text)
     {
