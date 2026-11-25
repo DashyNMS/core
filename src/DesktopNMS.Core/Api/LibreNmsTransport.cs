@@ -164,7 +164,8 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         _logger.LogInformation(
             "LibreNMS transport configured for {ApiBase}{Backup}",
             connection.ApiBase,
-            connection.BackupWebRoot is { } backup ? $" (backup address {backup}{(startOnBackup ? ", in use" : string.Empty)})" : string.Empty);
+            connection.Handler is not null ? " (answered in process, not over the network)"
+                : connection.BackupWebRoot is { } backup ? $" (backup address {backup}{(startOnBackup ? ", in use" : string.Empty)})" : string.Empty);
     }
 
     /// <summary>Switched to the backup address or back: a fresh client, so no pooled connection to the old address carries on being used.</summary>

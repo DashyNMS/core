@@ -202,6 +202,19 @@ public sealed class DemoResponderTests : IDisposable
     }
 
     [Fact]
+    public async Task The_transport_keeps_the_demo_through_a_rebuild_and_drops_it_for_another_connection()
+    {
+        _client.SetTimeout(60);
+        _client.TrustCertificate("AB");
+        Assert.Equal(24, (await _client.Devices.ListAsync()).Count);
+
+        _client.Connect(new LibreNmsConnection(new Uri("https://unreachable.invalid/"), "x", timeoutSeconds: 5));
+        await Assert.ThrowsAsync<LibreNmsApiException>(() => _client.Devices.ListAsync());
+
+        Assert.Null(new LibreNmsConnection(DemoResponder.Address, "x", backupWebRoot: new Uri("https://backup.example.net/")).WithHandler(() => new DemoMessageHandler(_demo)).BackupWebRoot);
+    }
+
+    [Fact]
     public async Task Requests_can_be_answered_at_once()
     {
         var answers = await Task.WhenAll(Enumerable.Range(0, 64).Select(i => Task.Run(() => _demo.Respond("GET", i % 2 == 0 ? "/api/v0/devices" : "/api/v0/devices/1/graphs/device_bits?width=300&height=120"))));

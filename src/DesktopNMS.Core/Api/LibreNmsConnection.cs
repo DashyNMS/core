@@ -49,9 +49,13 @@ public sealed class LibreNmsConnection
     /// </remarks>
     public Func<HttpMessageHandler>? Handler { get; private init; }
 
-    /// <summary>The same connection, answered by handlers from <paramref name="create"/>; see <see cref="Handler"/>.</summary>
+    /// <summary>
+    /// The same connection, answered by handlers from <paramref name="create"/>;
+    /// see <see cref="Handler"/>. With a handler it has no backup address,
+    /// which the handler would answer for anyway.
+    /// </summary>
     public LibreNmsConnection WithHandler(Func<HttpMessageHandler>? create)
-        => new(WebRoot, ApiToken, AllowUntrustedCertificate, TimeoutSeconds, BackupWebRoot, TrustedCertificates) { Handler = create };
+        => new(WebRoot, ApiToken, AllowUntrustedCertificate, TimeoutSeconds, create is null ? BackupWebRoot : null, TrustedCertificates) { Handler = create };
 
     /// <summary>The same connection, also trusting <paramref name="fingerprint"/>.</summary>
     public LibreNmsConnection WithTrustedCertificate(string fingerprint)
