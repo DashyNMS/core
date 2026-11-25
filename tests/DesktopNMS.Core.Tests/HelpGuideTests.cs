@@ -269,6 +269,25 @@ public class HelpGuideTests
     }
 
     [Fact]
+    public void An_anchor_already_taken_is_never_given_twice()
+    {
+        var guide = HelpGuide.Load(Product, null, Files(new Dictionary<string, string> { ["docs/guide/README.md"] = "# Guide\n\n## Setup\n\n## Setup\n\n## Setup-1\n\n## Setup" }));
+
+        Assert.Equal(["setup", "setup-1", "setup-1-1", "setup-2"], guide.Home!.Headings.Select(heading => heading.Anchor));
+    }
+
+    [Theory]
+    [InlineData("https://github.com/example/app/blob/main/docs/guide/gone.md")]
+    [InlineData("https://raw.githubusercontent.com/example/app/main/docs/guide/gone.md")]
+    [InlineData("https://github.com/example/app/wiki/Gone")]
+    public void A_missing_page_is_broken_by_its_public_address_too(string target)
+    {
+        var guide = Guide();
+
+        Assert.Equal(new HelpBrokenLink(target), guide.ResolveLink(guide.Home!, target));
+    }
+
+    [Fact]
     public void Marks_shown_as_code_are_left_alone()
     {
         var guide = HelpGuide.Load(Product, null, Files(new Dictionary<string, string>
@@ -341,6 +360,26 @@ public class HelpGuideTests
         }));
 
         Assert.Equal(["Gadgets", "Elsewhere"], guide.Search("gadgets").Take(2).Select(result => result.Page.Id));
+    }
+
+    [Theory]
+    [InlineData("Please watch a widget")]
+    [InlineData("Where does the widget have its clock?")]
+    public void Polite_words_do_not_hide_a_page(string query) => Assert.NotEmpty(Guide().Search(query));
+
+    [Fact]
+    public void A_shortened_passage_keeps_what_matched()
+    {
+        var guide = HelpGuide.Load(Product, null, Files(new Dictionary<string, string>
+        {
+            ["docs/guide/README.md"] = "# Guide",
+            ["docs/guide/a.md"] = "# Long\n\n" + string.Concat(Enumerable.Repeat("Read the introduction. ", 20)) + "Renew the certificate.",
+        }));
+
+        var passage = guide.Search("certificate")[0].Passage;
+
+        Assert.Contains("Renew the certificate.", passage);
+        Assert.StartsWith("…", passage);
     }
 
     [Fact]

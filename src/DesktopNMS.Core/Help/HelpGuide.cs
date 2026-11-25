@@ -132,7 +132,7 @@ public sealed partial class HelpGuide
         target = target.Trim();
         if (target.StartsWith('#'))
         {
-            return new HelpPageLink(page.Id, page.FindHeading(Decode(target[1..]))?.Anchor);
+            return new HelpPageLink(page.Id, page.FindHeading(HelpPaths.Decode(target[1..]))?.Anchor);
         }
 
         if (target.StartsWith("//", StringComparison.Ordinal) || SchemePattern().IsMatch(target))
@@ -141,7 +141,7 @@ public sealed partial class HelpGuide
         }
 
         var (path, fragment) = HelpMarkdown.SplitFragment(target);
-        path = Decode(WithoutQuery(path));
+        path = HelpPaths.Decode(HelpPaths.WithoutQuery(path));
         if (HelpPaths.Combine(page.Path, path) is not { } resolved)
         {
             return new HelpBrokenLink(target);
@@ -169,12 +169,12 @@ public sealed partial class HelpGuide
     {
         target = target.Trim();
         var (path, _) = HelpMarkdown.SplitFragment(target);
-        var resolved = SchemePattern().IsMatch(target) ? RepositoryPath(target) : HelpPaths.Combine(page.Path, Decode(WithoutQuery(path)));
+        var resolved = SchemePattern().IsMatch(target) ? HelpPaths.FromAddress(Product, target) : HelpPaths.Combine(page.Path, HelpPaths.Decode(HelpPaths.WithoutQuery(path)));
         return resolved is not null && _files.TryGet(resolved, out var content) ? new HelpImage(resolved, content) : null;
     }
 
     private HelpPageLink PageLink(HelpPage page, string? fragment)
-        => new(page.Id, fragment is null ? null : page.FindHeading(Decode(fragment))?.Anchor);
+        => new(page.Id, fragment is null ? null : page.FindHeading(HelpPaths.Decode(fragment))?.Anchor);
 
     private HelpLink ResolveAddress(string target)
     {
@@ -195,7 +195,7 @@ public sealed partial class HelpGuide
 
         // This guide's own pages, linked by their public address.
         var fragment = address.Fragment.Length > 1 ? address.Fragment[1..] : null;
-        if (RepositoryPath(target) is { } path && _byPath.TryGetValue(path, out var page))
+        if (HelpPaths.FromAddress(Product, target) is { } path && _byPath.TryGetValue(path, out var page))
         {
             return PageLink(page, fragment);
         }
@@ -203,20 +203,23 @@ public sealed partial class HelpGuide
         var wiki = $"/{Product.Repository}/wiki";
         if (IsGitHub(address) && address.AbsolutePath.StartsWith(wiki, StringComparison.OrdinalIgnoreCase))
         {
-            var name = Decode(address.AbsolutePath[wiki.Length..]).Trim('/');
+            var name = HelpPaths.Decode(address.AbsolutePath[wiki.Length..]).Trim('/');
             if (address.AbsolutePath.Length == wiki.Length || address.AbsolutePath[wiki.Length] == '/')
             {
-                if (_byId.TryGetValue(name.Length == 0 ? HomeId : name, out page))
-                {
-                    return PageLink(page, fragment);
-                }
+                // One this release's guide doesn't have is another release's page.
+                return _byId.TryGetValue(name.Length == 0 ? HomeId : name, out page) ? PageLink(page, fragment) : new HelpBrokenLink(target);
             }
+        }
+
+        if (HelpPaths.FromAddress(Product, target) is { } missing && IsGuidePage(missing))
+        {
+            return new HelpBrokenLink(target);
         }
 
         // A file elsewhere in this repository, which a wiki links at its main
         // branch: at this release instead, as it is for a relative link.
         if (Release is not null && IsGitHub(address) && address.AbsolutePath.StartsWith($"/{Product.Repository}/blob/", StringComparison.OrdinalIgnoreCase)
-            && RepositoryPath(target) is { } file)
+            && HelpPaths.FromAddress(Product, target) is { } file)
         {
             return RepositoryFile(file, fragment);
         }
@@ -227,49 +230,8 @@ public sealed partial class HelpGuide
     private HelpExternalLink RepositoryFile(string path, string? fragment)
         => new(new Uri($"https://github.com/{Product.Repository}/blob/{Release?.Reference ?? "main"}/{EscapePath(path)}{(fragment is null ? string.Empty : "#" + fragment)}"));
 
-    /// <summary>
-    /// The repository path in one of this repository's GitHub addresses,
-    /// whichever branch or tag it names: it's read from this release's files,
-    /// so the help never mixes releases.
-    /// </summary>
-    private string? RepositoryPath(string target)
-    {
-        if (!Uri.TryCreate(target, UriKind.Absolute, out var address) || address.Scheme != Uri.UriSchemeHttps)
-        {
-            return null;
-        }
-
-        var path = Decode(address.AbsolutePath);
-        var raw = $"/{Product.Repository}/";
-        string? rest = null;
-        if (address.Host.Equals("raw.githubusercontent.com", StringComparison.OrdinalIgnoreCase) && path.StartsWith(raw, StringComparison.OrdinalIgnoreCase))
-        {
-            rest = path[raw.Length..];
-        }
-        else if (IsGitHub(address))
-        {
-            foreach (var kind in (string[])["blob/", "raw/"])
-            {
-                if (path.StartsWith(raw + kind, StringComparison.OrdinalIgnoreCase))
-                {
-                    rest = path[(raw.Length + kind.Length)..];
-                }
-            }
-        }
-
-        // What follows is the branch or tag, then the file.
-        if (rest?.StartsWith("refs/heads/", StringComparison.Ordinal) == true)
-        {
-            rest = rest["refs/heads/".Length..];
-        }
-        else if (rest?.StartsWith("refs/tags/", StringComparison.Ordinal) == true)
-        {
-            rest = rest["refs/tags/".Length..];
-        }
-
-        var slash = rest?.IndexOf('/') ?? -1;
-        return slash > 0 ? HelpPaths.Normalise(rest![(slash + 1)..]) : null;
-    }
+    private static bool IsGuidePage(string path)
+        => path.StartsWith(HelpProduct.GuideFolder + "/", StringComparison.Ordinal) && path.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsGitHub(Uri address) => address.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase);
 
@@ -303,10 +265,10 @@ public sealed partial class HelpGuide
 
             foreach (var link in links)
             {
-                var (path, _) = HelpMarkdown.SplitFragment(link.Target);
-                var page = HelpPaths.Combine(from, Decode(path)) is { } resolved && pages.TryGetValue(resolved, out var byPath)
+                var path = HelpPaths.WithoutQuery(HelpMarkdown.SplitFragment(link.Target).Path);
+                var page = HelpPaths.Combine(from, HelpPaths.Decode(path)) is { } resolved && pages.TryGetValue(resolved, out var byPath)
                     ? byPath
-                    : pages.Values.FirstOrDefault(candidate => string.Equals(candidate.Id, Decode(path), StringComparison.OrdinalIgnoreCase));
+                    : pages.Values.FirstOrDefault(candidate => string.Equals(candidate.Id, HelpPaths.Decode(path), StringComparison.OrdinalIgnoreCase));
                 if (page is not null && listed.Add(page.Id))
                 {
                     groups[^1].Entries.Add(new HelpContentsEntry(page.Id, isWiki ? HelpMarkdown.Plain(link.Text) : page.Title));
@@ -322,20 +284,6 @@ public sealed partial class HelpGuide
         }
 
         return [.. groups.Where(group => group.Entries.Count > 0).Select(group => new HelpContentsGroup(group.Name, group.Entries))];
-    }
-
-    private static string WithoutQuery(string path) => path.IndexOf('?') is var query and >= 0 ? path[..query] : path;
-
-    private static string Decode(string text)
-    {
-        try
-        {
-            return Uri.UnescapeDataString(text);
-        }
-        catch (UriFormatException)
-        {
-            return text;
-        }
     }
 
     private static string EscapePath(string path) => string.Join('/', path.Split('/').Select(Uri.EscapeDataString));

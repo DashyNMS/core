@@ -14,16 +14,17 @@ public sealed record HelpSearchResult(HelpPage Page, HelpHeading? Heading, strin
 internal sealed partial class HelpSearchIndex
 {
     /// <summary>A question's less important words, which would match nearly every page.</summary>
-    private static readonly HashSet<string> Ignored = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> Ignored = new[]
     {
         "a", "about", "all", "am", "an", "and", "any", "are", "as", "at", "be", "by", "can", "could", "dashynms", "do", "does", "for", "from",
         "get", "have", "help", "how", "i", "if", "in", "into", "is", "it", "its", "like", "me", "my", "need", "of", "on", "or", "please",
         "should", "so", "that", "the", "them", "then", "there", "this", "to", "up", "use", "want", "was", "what", "when", "where", "which",
         "why", "will", "with", "would", "you", "your",
-    };
+    }.Select(Stem).ToHashSet(StringComparer.Ordinal);
 
     private const int MaxTerms = 24;
     private const int PassageLength = 280;
+    private const int PassageLead = 80;
 
     private readonly List<Entry> _entries;
     private readonly Dictionary<string, int> _documents = new(StringComparer.Ordinal);
@@ -160,13 +161,26 @@ internal sealed partial class HelpSearchIndex
             return passage;
         }
 
-        var cut = passage.LastIndexOf(' ', PassageLength);
-        return passage[..(cut > 0 ? cut : PassageLength)].TrimEnd(',', ';', ' ') + "…";
+        // From a little before the first of the words, when the line starts too far away from it.
+        var match = WordPattern().Matches(passage).FirstOrDefault(word => wanted.Contains(Clean(word.Value)));
+        var start = match is null || match.Index + match.Length <= PassageLength ? 0 : passage.LastIndexOf(' ', match.Index - Math.Min(PassageLead, match.Index)) + 1;
+        var shown = passage[start..];
+        var lead = start > 0 ? "…" : string.Empty;
+        if (shown.Length <= PassageLength)
+        {
+            return lead + shown;
+        }
+
+        var cut = shown.LastIndexOf(' ', PassageLength);
+        return lead + shown[..(cut > 0 ? cut : PassageLength)].TrimEnd(',', ';', ' ') + "…";
     }
 
     /// <summary>Words in lower case, with common endings taken off so "acknowledging alerts" finds "acknowledge an alert".</summary>
     private static IEnumerable<string> Words(string text)
-        => WordPattern().Matches(text.ToLowerInvariant()).Select(match => Stem(match.Value.Replace("'", string.Empty, StringComparison.Ordinal).Replace("’", string.Empty, StringComparison.Ordinal)));
+        => WordPattern().Matches(text).Select(match => Clean(match.Value));
+
+    private static string Clean(string word)
+        => Stem(word.ToLowerInvariant().Replace("'", string.Empty, StringComparison.Ordinal).Replace("’", string.Empty, StringComparison.Ordinal));
 
     private static string Stem(string word)
     {

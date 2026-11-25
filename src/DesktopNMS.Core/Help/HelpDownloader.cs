@@ -50,7 +50,9 @@ internal sealed class HelpDownloader(HttpClient http, HelpProduct product, HelpR
                 foreach (var (isImage, _, target) in HelpMarkdown.Links(line))
                 {
                     var (relative, _) = HelpMarkdown.SplitFragment(target);
-                    if (relative.Length == 0 || HelpPaths.Combine(path, Uri.UnescapeDataString(relative)) is not { } linked)
+                    var linked = HelpPaths.FromAddress(product, target)
+                        ?? (relative.Length == 0 ? null : HelpPaths.Combine(path, HelpPaths.Decode(HelpPaths.WithoutQuery(relative))));
+                    if (linked is null)
                     {
                         continue;
                     }

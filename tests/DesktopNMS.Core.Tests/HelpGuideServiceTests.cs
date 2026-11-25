@@ -212,6 +212,23 @@ public sealed class HelpGuideServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Pages_linked_by_their_address_or_with_a_query_are_fetched_at_the_release()
+    {
+        _server.Files["docs/guide/README.md"] = Encoding.UTF8.GetBytes(
+            "# Guide\n\n[a](a.md?plain=1) [b](https://github.com/example/app/blob/main/docs/guide/b.md) ![c](https://raw.githubusercontent.com/example/app/main/docs/c.png)");
+        _server.Files["docs/guide/a.md"] = "# A"u8.ToArray();
+        _server.Files["docs/guide/b.md"] = "# B"u8.ToArray();
+        _server.Files["docs/c.png"] = [7];
+        using var service = Service(bundled: HelpFileSet.Empty);
+
+        Assert.Equal(HelpRefreshOutcome.Updated, await service.RefreshAsync());
+
+        Assert.Equal(["Home", "A", "B"], service.Current.Pages.Select(page => page.Id));
+        Assert.Contains("https://raw.githubusercontent.com/example/app/v2.0.0-nightly.4/docs/c.png", _server.Requests);
+        Assert.All(_server.Requests, address => Assert.Contains("/v2.0.0-nightly.4/", address, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_redirect_is_not_followed()
     {
         _server.Redirecting = true;

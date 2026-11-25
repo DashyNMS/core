@@ -230,15 +230,15 @@ internal static partial class HelpMarkdown
             }
         }
 
-        var anchor = slug.ToString();
-        if (!used.TryGetValue(anchor, out var count))
+        var first = slug.ToString();
+        var anchor = first;
+        for (var count = used.GetValueOrDefault(first); used.ContainsKey(anchor); anchor = first + "-" + count.ToString(System.Globalization.CultureInfo.InvariantCulture))
         {
-            used[anchor] = 0;
-            return anchor;
+            used[first] = ++count;
         }
 
-        used[anchor] = ++count;
-        return anchor + "-" + count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        used[anchor] = used.GetValueOrDefault(anchor);
+        return anchor;
     }
 
     private static string WithoutComments(string text)
@@ -333,7 +333,7 @@ internal static partial class HelpMarkdown
     [GeneratedRegex(@"^\s*(`{3,}|~{3,})(.*)$")]
     private static partial Regex FenceLine();
 
-    [GeneratedRegex(@"(!?)\[((?:\\.|[^\[\]\\])*)\]\(\s*<?([^)\s>]+)>?(?:\s+""[^""]*"")?\s*\)")]
+    [GeneratedRegex(@"(!?)\[((?:\\.|[^\[\]\\])*)\]\(\s*<?((?:[^()\s<>]|\([^()\s<>]{0,200}\))+)>?(?:\s+""[^""]*"")?\s*\)")]
     private static partial Regex LinkPattern();
 
     [GeneratedRegex(@"\[\[([^\[\]|]+)(?:\|([^\[\]]+))?\]\]")]
