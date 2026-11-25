@@ -44,14 +44,15 @@ public sealed class HelpFileSet
     public static HelpFileSet FromAssembly(Assembly assembly, string prefix)
     {
         var files = new List<KeyValuePair<string, byte[]>>();
-        foreach (var name in assembly.GetManifestResourceNames())
+        foreach (var resource in assembly.GetManifestResourceNames())
         {
+            var name = resource.Replace('\\', '/');
             if (!name.StartsWith(prefix, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            using var stream = assembly.GetManifestResourceStream(name);
+            using var stream = assembly.GetManifestResourceStream(resource);
             if (stream is null || stream.Length > MaxFileBytes)
             {
                 continue;
@@ -59,7 +60,7 @@ public sealed class HelpFileSet
 
             var content = new byte[stream.Length];
             stream.ReadExactly(content);
-            files.Add(new(name[prefix.Length..].Replace('\\', '/'), content));
+            files.Add(new(name[prefix.Length..], content));
         }
 
         return new HelpFileSet(files);
