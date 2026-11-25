@@ -229,6 +229,15 @@ public sealed class HelpGuideServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_host_that_only_reads_text_fetches_no_images()
+    {
+        using var service = new HelpGuideService(Product, Release, HelpGuideTests.Files(), http: new HttpClient(_server), time: _clock, includeImages: false);
+
+        Assert.Equal(HelpRefreshOutcome.Unchanged, await service.RefreshAsync());
+        Assert.DoesNotContain(_server.Requests, address => address.EndsWith(".png", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_redirect_is_not_followed()
     {
         _server.Redirecting = true;

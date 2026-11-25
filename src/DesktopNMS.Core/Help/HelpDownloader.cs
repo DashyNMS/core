@@ -8,7 +8,7 @@ namespace DesktopNMS.Core.Help;
 /// page, the pages it links to and the images they show. Only those
 /// addresses are ever asked for, and sizes are bounded.
 /// </summary>
-internal sealed class HelpDownloader(HttpClient http, HelpProduct product, HelpRelease release)
+internal sealed class HelpDownloader(HttpClient http, HelpProduct product, HelpRelease release, bool includeImages)
 {
     public const int MaxFiles = 300;
     public const long MaxTotalBytes = 48L * 1024 * 1024;
@@ -59,7 +59,10 @@ internal sealed class HelpDownloader(HttpClient http, HelpProduct product, HelpR
 
                     if (isImage && IsImage(linked))
                     {
-                        images.Add(linked);
+                        if (includeImages)
+                        {
+                            images.Add(linked);
+                        }
                     }
                     else if (!isImage && linked.StartsWith(HelpProduct.GuideFolder + "/", StringComparison.Ordinal)
                         && linked.EndsWith(".md", StringComparison.OrdinalIgnoreCase) && seen.Add(linked))

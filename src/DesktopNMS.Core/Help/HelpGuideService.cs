@@ -81,6 +81,7 @@ public sealed class HelpGuideService : IDisposable
     private readonly string? _directory;
     private readonly HttpClient _http;
     private readonly bool _ownsHttp;
+    private readonly bool _includeImages;
     private readonly TimeProvider _time;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _stopping = new();
@@ -95,7 +96,8 @@ public sealed class HelpGuideService : IDisposable
     /// <param name="bundled">The snapshot built into the app.</param>
     /// <param name="cacheDirectory">Where downloaded copies are kept, such as <see cref="Configuration.AppPaths.HelpCacheDirectory"/>, or null to keep them only in memory.</param>
     /// <param name="http">Shared client, or null for one of its own. It must not follow redirects or add headers that identify anyone.</param>
-    public HelpGuideService(HelpProduct product, HelpRelease? release, HelpFileSet bundled, string? cacheDirectory = null, HttpClient? http = null, TimeProvider? time = null)
+    /// <param name="includeImages">Whether a refresh fetches the images pages show. A host that only reads text leaves them out.</param>
+    public HelpGuideService(HelpProduct product, HelpRelease? release, HelpFileSet bundled, string? cacheDirectory = null, HttpClient? http = null, TimeProvider? time = null, bool includeImages = true)
     {
         // It names a folder.
         if (product.Id.Length == 0 || !product.Id.All(character => char.IsAsciiLetterLower(character) || char.IsAsciiDigit(character) || character == '-'))
@@ -108,6 +110,7 @@ public sealed class HelpGuideService : IDisposable
         _bundled = bundled;
         _directory = cacheDirectory is null ? null : Path.Combine(Path.GetFullPath(cacheDirectory), product.Id);
         _ownsHttp = http is null;
+        _includeImages = includeImages;
         _http = http ?? new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(30) };
         _time = time ?? TimeProvider.System;
         var guide = HelpGuide.Load(product, release, bundled);
@@ -208,7 +211,7 @@ public sealed class HelpGuideService : IDisposable
         limited.CancelAfter(DownloadLimit);
         try
         {
-            var files = await new HelpDownloader(_http, Product, Release!).DownloadAsync(_bundled, limited.Token).ConfigureAwait(false);
+            var files = await new HelpDownloader(_http, Product, Release!, _includeImages).DownloadAsync(_bundled, limited.Token).ConfigureAwait(false);
             if (files is null)
             {
                 _nextTry = now + RefreshInterval;
