@@ -66,6 +66,13 @@ public static class AppPaths
     /// </summary>
     public static string LogoCacheDirectory => Path.Combine(DataDirectory, "cache", "logos");
 
+    /// <summary>
+    /// Copies of the user guide downloaded for the running release - see
+    /// Help.HelpGuideService, which creates it when it first saves one. Nothing
+    /// about the user or their network is in it.
+    /// </summary>
+    public static string HelpCacheDirectory => Path.Combine(DataDirectory, "cache", "help");
+
     /// <summary>Where a downloaded update's installer waits to be run - see Updates.UpdatePackage.</summary>
     public static string UpdatesDirectory => Path.Combine(DataDirectory, "updates");
 
