@@ -26,6 +26,7 @@ DashyNMS Core is the plain .NET library behind [DashyNMS desktop](https://github
 - **Monitors and caches:** the alert, device and sensor pollers, the device and rule caches, a disk cache of the last 20 device logos viewed, and the dashboard layout, including the Spotlight that keeps an event log or Graylog card to some devices, a group or a location. Each app supplies when it's in the background and whether it's signed in.
 - **Graphs:** LibreNMS's graphs restyled to the app's theme, with the app's own legends.
 - **Sensor definitions:** optional OS-sharded data with exact and source-derived type/context selectors. Unknown values, missing metadata and conflicting mappings remain unresolved.
+- **Demo:** an example LibreNMS network that answers the API with no server, for the apps' demos and load tests.
 - **Help:** a user guide read for use inside an app: pages, contents, links, images and search, from a bundled copy or one refreshed for the running release.
 - **Sign-in, settings and the rest:** sign in with LibreNMS's own page, settings and the starter dashboard, and the open-source notices every app shows.
 
@@ -149,6 +150,28 @@ privacy notice. Mobile does the same when it adds Help (DashyNMS/mobile#668). MC
 the three guides and searches them (DashyNMS/mcp#164). This is an additive API in the
 next `2.0.0-edge.N` package.
 
+### Demo network
+
+`Demo.DemoResponder` is the example network the apps' demos show (#119): two dozen
+devices across four sites under `example.net`, in the documentation address ranges, with
+ports, sensors, neighbours, alerts, rules, events, graphs and Network Search data. It
+answers one request at a time, `Respond(method, pathAndQuery, body)`, with LibreNMS 26.9's
+JSON or an rrdtool-shaped SVG, as its remarks set out. `/faults` answers 404, so Core
+reads the example alerts from `/alerts`. Writes are accepted and forgotten.
+
+`Demo.DemoMessageHandler` answers HTTP requests from it in the same process, so the real
+transport and client run a demo with no listener. `DemoResponder.Connection()` is a
+connection to `DemoResponder.Address` that carries it (`LibreNmsConnection.Handler`), so
+every client built for that connection answers from the demo, the connection test's
+included, and a connection without one never does. `DemoFleetOptions(ExtraDevices: n)`
+adds switches, addressed in `2001:db8::/32`, for measuring a large network; the same
+seed gives the same network. `PinnedDevices`, `RecentlyViewed`, `PinnedSensors` and
+`FeaturedDeviceId` are what a demo seeds its settings with.
+
+Desktop moves its demo onto it and keeps its listener as a thin wrapper. Mobile uses the
+handler for its demo (DashyNMS/mobile#160) and the larger fleet for its load test
+(DashyNMS/mobile#132). MCP isn't affected.
+
 ## Development
 
 Building, the edge, nightly and release builds, and the commit standard are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Report security problems privately: see [SECURITY.md](SECURITY.md).
@@ -162,25 +185,3 @@ Building, the edge, nightly and release builds, and the commit standard are in [
 
 <sub>DashyNMS isn't affiliated with LibreNMS, Graylog or Unimus, which are trademarks of their respective owners.<br>
 MIT licence: see [LICENSE](LICENSE).</sub>
-
-### Demo network
-
-`Demo.DemoResponder` is the example network the apps' demos show (#119): two dozen
-devices across four sites under `example.net`, in the documentation address ranges, with
-ports, sensors, neighbours, alerts, rules, events, graphs and Network Search data. It
-answers one request at a time, `Respond(method, pathAndQuery, body)`, with LibreNMS 26.9's
-JSON or an rrdtool-shaped SVG, as its remarks set out. `/faults` answers 404, so Core
-reads the example alerts from `/alerts`. Writes are accepted and forgotten.
-
-`Demo.DemoMessageHandler` answers HTTP requests from it in the same process, so the real
-transport and client run a demo with no listener: call `LibreNmsTransport.UseHandler`
-with it before connecting to `DemoResponder.Address` with `DemoResponder.Token`, and
-`UseHandler(null)` before connecting anywhere else. `DemoFleetOptions(ExtraDevices: n)`
-adds switches, addressed in `2001:db8::/32`, for measuring a large network; the same
-seed gives the same network. `PinnedDevices`, `RecentlyViewed`, `PinnedSensors` and
-`FeaturedDeviceId` are what a demo seeds its settings with.
-
-Desktop moves its demo onto it and keeps its listener as a thin wrapper. Mobile uses the
-handler for its demo (DashyNMS/mobile#160) and the larger fleet for its load test
-(DashyNMS/mobile#132). MCP isn't affected. This is an additive API in the next
-`2.0.0-edge.N` package.
