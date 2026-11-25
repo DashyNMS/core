@@ -36,10 +36,10 @@ namespace DesktopNMS.Core.Demo;
 public sealed class DemoResponder
 {
     /// <summary>The token a demo signs in with. It opens nothing anywhere else.</summary>
-    public const string Token = "demo-token-not-a-real-one";
+    public static string Token => "demo-token-not-a-real-one";
 
     /// <summary>The server version the example network reports.</summary>
-    public const string ServerVersion = "26.9.1";
+    public static string ServerVersion => DemoFleet.ServerVersion;
 
     private readonly DemoFleet _fleet;
 
@@ -57,6 +57,14 @@ public sealed class DemoResponder
     /// nowhere; <see cref="DemoMessageHandler"/> never sends one.
     /// </summary>
     public static Uri Address { get; } = new("https://demo.example.net/");
+
+    /// <summary>
+    /// A connection to <see cref="Address"/> that this answers in the same
+    /// process. Every client built for it - the connection test's included -
+    /// answers from here and never from the network.
+    /// </summary>
+    public Api.LibreNmsConnection Connection(int timeoutSeconds = 30)
+        => new Api.LibreNmsConnection(Address, Token, timeoutSeconds: timeoutSeconds).WithHandler(() => new DemoMessageHandler(this));
 
     /// <summary>The device a demo opens to show off a device's pages.</summary>
     public int FeaturedDeviceId => _fleet.FeaturedDeviceId;

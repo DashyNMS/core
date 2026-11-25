@@ -26,7 +26,6 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
 
     private HttpClient? _http;
     private HttpMessageHandler? _handler;
-    private Func<HttpMessageHandler>? _createHandler;
 
     /// <summary>The web root <see cref="_http"/> talks to - the backup's own URL when on one that isn't just another route - for files outside the API.</summary>
     private Uri? _webBase;
@@ -188,33 +187,10 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         }
     }
 
-    /// <summary>
-    /// Answers every request with handlers this makes instead of the network,
-    /// from the next <see cref="Configure"/> on; null goes back to the network.
-    /// A demo uses it to run the real client against <see cref="Demo.DemoResponder"/>
-    /// in the same process, with no listener (#119).
-    /// </summary>
-    /// <remarks>
-    /// The handler sits where the socket handler would, beneath the redirect
-    /// check, so requests carry the same headers and base address. Certificate
-    /// trust and the backup address don't apply to it.
-    /// </remarks>
-    public void UseHandler(Func<HttpMessageHandler>? create)
-    {
-        lock (_sync)
-        {
-            _createHandler = create;
-        }
-    }
-
     private void Install(LibreNmsConnection connection)
     {
-        Func<HttpMessageHandler>? create;
-        lock (_sync)
-        {
-            create = _createHandler;
-        }
-
+        // A demo's connection answers in the same process (#119).
+        var create = connection.Handler;
         HttpMessageHandler inner = create is not null ? create() : SocketsHandler(connection);
         var onBackup = create is null && _failover.IsOnBackup && connection.BackupWebRoot is not null;
         var dialBackupHost = onBackup && connection.BackupIsAnotherRoute;

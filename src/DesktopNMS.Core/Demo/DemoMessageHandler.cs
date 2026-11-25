@@ -6,7 +6,7 @@ namespace DesktopNMS.Core.Demo;
 /// <summary>
 /// Answers HTTP requests from <see cref="DemoResponder"/> in the same process
 /// (#119), so an app's real <see cref="Api.LibreNmsTransport"/> and client run
-/// a demo with no listener: give it to <see cref="Api.LibreNmsTransport.UseHandler"/>.
+/// a demo with no listener: <see cref="DemoResponder.Connection"/> carries one.
 /// It never touches the network, whatever address a request names.
 /// </summary>
 public sealed class DemoMessageHandler(DemoResponder responder) : HttpMessageHandler
