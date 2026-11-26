@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using DesktopNMS.Core.Api;
 using DesktopNMS.Core.Demo;
@@ -74,35 +75,82 @@ public sealed class DemoResponderTests : IDisposable
         Assert.DoesNotContain("class=\"legend\"", bare, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Graphs_asked_for_as_base64_png_come_in_librenms_envelope()
+    [Theory]
+    [InlineData("device_bits?from=-1d&width=480&height=200", 480, 200)]
+    [InlineData("device_temperature?from=-1d&legend=no", 600, 200)]
+    [InlineData("ports/Te1%2F0%2F1/port_bits?from=-1d&width=300&height=120", 300, 120)]
+    public void Graphs_asked_for_as_base64_png_come_in_librenms_envelope(string graph, int width, int height)
     {
-        var path = $"/api/v0/devices/{_demo.FeaturedDeviceId}/device_bits?from=-1d&width=480&height=200&graph_type=png&output=base64";
+        var path = $"/api/v0/devices/{_demo.FeaturedDeviceId}/{graph}&graph_type=png&output=base64";
         var first = _demo.Respond("GET", path);
-        var again = _demo.Respond("GET", path);
 
         Assert.Equal(200, first.Status);
         Assert.Equal("application/json", first.ContentType);
-        Assert.Equal(first.Body, again.Body);
-        using var doc = JsonDocument.Parse(first.Body);
-        var image = doc.RootElement.GetProperty("image");
-        Assert.Equal("image/png", image.GetProperty("content-type").GetString());
-        var png = Convert.FromBase64String(image.GetProperty("image").GetString()!);
+        Assert.Equal(first.Body, _demo.Respond("GET", path).Body);
+        var png = Png(first);
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, png[..8]);
-        Assert.Equal(480, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16)));
-        Assert.Equal(200, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20)));
+
+        // Every chunk's CRC holds, and the image data inflates to a filter byte and RGB for each row.
+        var at = 8;
+        var types = new List<string>();
+        using var idat = new MemoryStream();
+        while (at < png.Length)
+        {
+            var length = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(at));
+            var type = System.Text.Encoding.ASCII.GetString(png, at + 4, 4);
+            var crc = BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(at + 8 + length));
+            Assert.Equal(Crc32(png.AsSpan(at + 4, 4 + length)), crc);
+            if (type == "IHDR")
+            {
+                Assert.Equal(width, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(at + 8)));
+                Assert.Equal(height, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(at + 12)));
+            }
+
+            if (type == "IDAT") idat.Write(png, at + 8, length);
+            types.Add(type);
+            at += 12 + length;
+        }
+
+        Assert.Equal(["IHDR", "IDAT", "IEND"], types);
+        idat.Position = 0;
+        using var pixels = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(idat, System.IO.Compression.CompressionMode.Decompress))
+        {
+            zlib.CopyTo(pixels);
+        }
+
+        Assert.Equal(height * (width * 3 + 1), pixels.Length);
     }
 
     [Fact]
     public void A_png_graph_is_bounded_and_without_base64_stays_svg()
     {
-        var huge = _demo.Respond("GET", "/api/v0/devices/1/device_processor?from=-1d&width=100000&height=100000&graph_type=png&output=base64");
-        using var doc = JsonDocument.Parse(huge.Body);
-        var png = Convert.FromBase64String(doc.RootElement.GetProperty("image").GetProperty("image").GetString()!);
-        Assert.Equal(2400, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16)));
-        Assert.Equal(1200, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20)));
+        var png = Png(_demo.Respond("GET", "/api/v0/devices/1/device_processor?from=-1d&width=100000&height=100000&graph_type=png&output=base64"));
+        Assert.Equal(2400, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16)));
+        Assert.Equal(1200, BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20)));
 
         Assert.Equal("image/svg+xml", _demo.Respond("GET", "/api/v0/devices/1/device_processor?from=-1d&graph_type=png").ContentType);
+    }
+
+    /// <summary>The PNG specification's CRC, worked bit by bit, independent of the encoder's table.</summary>
+    private static uint Crc32(ReadOnlySpan<byte> bytes)
+    {
+        var crc = 0xFFFFFFFFu;
+        foreach (var b in bytes)
+        {
+            crc ^= b;
+            for (var k = 0; k < 8; k++) crc = (crc & 1) != 0 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+        }
+
+        return crc ^ 0xFFFFFFFFu;
+    }
+
+    private static byte[] Png(DemoResponse response)
+    {
+        using var doc = JsonDocument.Parse(response.Body);
+        var image = doc.RootElement.GetProperty("image");
+        Assert.Equal("image/png", image.GetProperty("content-type").GetString());
+        return Convert.FromBase64String(image.GetProperty("image").GetString()!);
     }
 
     [Fact]

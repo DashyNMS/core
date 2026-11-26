@@ -26,8 +26,11 @@ namespace DesktopNMS.Core.Demo;
 /// The graph contract: <c>devices/{id}/graphs/…</c> and
 /// <c>devices/{id}/ports/{port}/…</c> return SVG drawn as rrdtool draws it,
 /// in LibreNMS's colours, at the width and height asked for and without the
-/// legend for <c>legend=no</c>. The same request gives the same graph, and a
-/// device's traffic graph ends at the rate its ports report.
+/// legend for <c>legend=no</c>. Asked for with <c>graph_type=png&amp;output=base64</c>,
+/// as the Intelligence graph lookup asks, the same graph comes as a PNG in
+/// LibreNMS's envelope: <c>{"status":"ok","image":{"image":"…","content-type":"image/png"}}</c>.
+/// The same request gives the same graph, and a device's traffic graph ends at
+/// the rate its ports report.
 /// </para>
 /// <para>
 /// It's built once and only read afterwards, so any number of requests may

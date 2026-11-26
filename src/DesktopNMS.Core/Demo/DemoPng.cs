@@ -70,7 +70,9 @@ internal static class DemoPng
         foreach (var hour in DemoGraphs.TimeHours)
         {
             var text = DemoGraphs.TimeLabel(now, hour);
-            canvas.Text((int)Math.Round(left + plotW * hour / 24.0) - Canvas.TextWidth(text) / 2, bottom + 6, text, Black);
+            // Centred under its hour, but the last one stays inside the image.
+            var x = Math.Min((int)Math.Round(left + plotW * hour / 24.0) - Canvas.TextWidth(text) / 2, canvas.Width - 1 - Canvas.TextWidth(text));
+            canvas.Text(x, bottom + 6, text, Black);
         }
 
         if (legend)
@@ -259,14 +261,20 @@ internal static class DemoPng
             var typeBytes = Encoding.ASCII.GetBytes(type);
             png.Write(typeBytes);
             png.Write(data);
-            var crc = 0xFFFFFFFFu;
-            foreach (var b in typeBytes.Concat(data))
+            var crc = Crc(Crc(0xFFFFFFFFu, typeBytes), data);
+
+            BinaryPrimitives.WriteUInt32BigEndian(number, crc ^ 0xFFFFFFFFu);
+            png.Write(number);
+        }
+
+        private static uint Crc(uint crc, byte[] bytes)
+        {
+            foreach (var b in bytes)
             {
                 crc = CrcTable[(crc ^ b) & 0xFF] ^ (crc >> 8);
             }
 
-            BinaryPrimitives.WriteUInt32BigEndian(number, crc ^ 0xFFFFFFFFu);
-            png.Write(number);
+            return crc;
         }
 
         // Five bits a row, seven rows a glyph: digits, capitals and the few signs the labels use.

@@ -1003,6 +1003,13 @@ internal sealed partial class DemoFleet
     /// <c>graph_type=png&amp;output=base64</c>, a PNG in LibreNMS's JSON envelope - the
     /// form the Intelligence graph lookup asks for, so it can hand the image to a model.
     /// </summary>
+    /// <remarks>
+    /// Two knowing differences from LibreNMS: <c>graph_type=png</c> without base64 still
+    /// gets SVG (LibreNMS sends raw PNG, which <see cref="DemoResponse"/>'s text body can't
+    /// carry, and nothing asks for it), and <c>graph_type=svg&amp;output=base64</c> gets plain
+    /// SVG. MCP's small-image check asks for that, but only after a PNG under 2 KB, and the
+    /// demo's PNGs are larger.
+    /// </remarks>
     private static DemoResponse Graph(DemoChart chart, IReadOnlyDictionary<string, string> query, bool legend = true)
     {
         if (query.TryGetValue("graph_type", out var type) && type == "png" && query.TryGetValue("output", out var output) && output == "base64")
