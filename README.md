@@ -26,6 +26,8 @@ DashyNMS Core is the plain .NET library behind [DashyNMS desktop](https://github
 - **Monitors and caches:** the alert, device and sensor pollers, the device and rule caches, a disk cache of the last 20 device logos viewed, and the dashboard layout, including the Spotlight that keeps an event log or Graylog card to some devices, a group or a location. Each app supplies when it's in the background and whether it's signed in.
 - **Graphs:** LibreNMS's graphs restyled to the app's theme, with the app's own legends.
 - **Sensor definitions:** optional OS-sharded data with exact and source-derived type/context selectors. Unknown values, missing metadata and conflicting mappings remain unresolved.
+- **Demo:** an example LibreNMS network that answers the API with no server, for the apps' demos and load tests.
+- **Help:** a user guide read for use inside an app: pages, contents, links, images and search, from a bundled copy or one refreshed for the running release.
 - **Sign-in, settings and the rest:** sign in with LibreNMS's own page, settings and the starter dashboard, and the open-source notices every app shows.
 
 ## Use it
@@ -49,7 +51,7 @@ The assembly and namespaces are still `DesktopNMS.Core`; renaming them is [#1](h
 
 `AppSettings.DiagnosticsConsentVersion` records which Desktop diagnostics disclosure was explicitly accepted. It defaults to `0` for existing settings (launch-only scope) and survives cloning and persistence. The existing `DiagnosticsSharingPreference` values are unchanged. Desktop must require a new explicit choice before collecting broader usage/performance metrics and must treat unknown versions conservatively. Mobile and MCP need no behaviour changes; this Desktop metadata does not authorise collection in other clients. This is an additive API change in the next `2.0.0-edge.N` package.
 
-`AppSettings.UpdateChannel` (#104) is the updates an app is offered: `Stable` (the default), `Nightly` or `Edge`. Settings that had `IncludePreviewBuilds` on load as Nightly, and the old value is still saved for older apps. `UpdateChannels.FindAsync` finds a channel's newest release and `UpdateChannels.IsUpdate` decides whether to offer it; `GitHubRelease.Version` is the version to show and name files by, which for the edge release isn't its tag. Within one version, `ReleaseVersion` ranks edge below preview, preview below nightly and nightly below stable. Desktop adds the choice to Settings; mobile and MCP need no changes. This is an additive API change in the next `2.0.0-edge.N` package.
+`AppSettings.UpdateChannel` (#104) is the updates an app is offered: `Stable` (the default), `Nightly` or `Edge`. Settings that had `IncludePreviewBuilds` on load as Nightly, and the old value is still saved for older apps. `UpdateChannels.FindAsync` finds a channel's newest release and `UpdateChannels.IsUpdate` decides whether to offer it. Within one version, `ReleaseVersion` ranks edge below preview, preview below nightly and nightly below stable. Desktop adds the choice to Settings; mobile and MCP need no changes. This is an additive API change in the next `2.0.0-edge.N` package.
 
 `AppSettings.PortsLayout` remembers whether Device Details' Ports tab shows a table or cards: `AppSettings.PortsLayoutTable` (`"Table"`, the default) or `AppSettings.PortsLayoutCards` (`"Cards"`). Settings files without it, and any other value, load as the table, and `Clone()` carries it. Desktop adds the choice under Settings > Devices; mobile and MCP need no changes. This is an additive API change in the next `2.0.0-edge.N` package.
 
@@ -124,6 +126,51 @@ add up to the network. `[[status:ignored]]` renders as a neutral label. The
 model instruction blocks are unchanged. Desktop gets this by pinning the next
 `2.0.0-edge.N`. Mobile builds its own cards and needs no change; MCP isn't
 affected. This is a non-breaking fix in the 2.0 development stream.
+
+### In-app help
+
+`Help.HelpGuide` reads a user guide for use inside an app (#96), from a repository's
+`docs/guide` or the wiki copied from it (which
+can be bundled but isn't what a refresh reads, and needs the images it shows bundled too). It gives the pages, the contents list, each
+page's headings and search, and works out where links and images go:
+`HelpPageLink` (stay in the app), `HelpExternalLink` (open the browser) or
+`HelpBrokenLink` (open nothing). Images come only from the guide's own files. Core
+renders nothing; each app draws a page's Markdown itself.
+
+`Help.HelpGuideService` chooses the guide to show. It starts with the snapshot an app
+bundles (`HelpFileSet.FromAssembly`), and nothing is requested until the app calls
+`RefreshAsync`. That downloads the same product's guide at the running release's tag
+(`HelpRelease.ForVersion`) from `raw.githubusercontent.com`, with a generic client name
+and nothing about the user or their network. A download that isn't whole leaves the last
+good copy in use. `Changed` is raised on the thread that did the work.
+
+Desktop bundles `docs/guide` and `docs/screenshots`, renders the pages and calls
+`RefreshAsync` if it wants refreshed ones (DashyNMS/desktop#604), and says so in its
+privacy notice. Mobile does the same when it adds Help (DashyNMS/mobile#668). MCP bundles
+the three guides and searches them (DashyNMS/mcp#164). This is an additive API in the
+next `2.0.0-edge.N` package.
+
+### Demo network
+
+`Demo.DemoResponder` is the example network the apps' demos show (#119): two dozen
+devices across four sites under `example.net`, in the documentation address ranges, with
+ports, sensors, neighbours, alerts, rules, events, graphs and Network Search data. It
+answers one request at a time, `Respond(method, pathAndQuery, body)`, with LibreNMS 26.9's
+JSON or an rrdtool-shaped SVG, as its remarks set out. `/faults` answers 404, so Core
+reads the example alerts from `/alerts`. Writes are accepted and forgotten.
+
+`Demo.DemoMessageHandler` answers HTTP requests from it in the same process, so the real
+transport and client run a demo with no listener. `DemoResponder.Connection()` is a
+connection to `DemoResponder.Address` that carries it (`LibreNmsConnection.Handler`), so
+every client built for that connection answers from the demo, the connection test's
+included, and a connection without one never does. `DemoFleetOptions(ExtraDevices: n)`
+adds switches, addressed in `2001:db8::/32`, for measuring a large network; the same
+seed gives the same network. `PinnedDevices`, `RecentlyViewed`, `PinnedSensors` and
+`FeaturedDeviceId` are what a demo seeds its settings with.
+
+Desktop moves its demo onto it and keeps its listener as a thin wrapper. Mobile uses the
+handler for its demo (DashyNMS/mobile#160) and the larger fleet for its load test
+(DashyNMS/mobile#132). MCP isn't affected.
 
 ## Development
 

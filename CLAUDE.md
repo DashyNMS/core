@@ -14,7 +14,7 @@ Shared, UI-free .NET library for the DashyNMS desktop app, DashyNMS Mobile and t
 - Work on a branch, open a PR into `main` (one issue per PR), and squash-merge.
 - PR titles, commits and issue titles: `type(scope): what changes, in plain words`.
   - Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
-  - Scopes: `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`, `intelligence`.
+  - Scopes: `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`, `intelligence`, `help`, `demo`.
   - Lower-case start, no full stop, under about 72 characters, describing the result.
   - `Closes #NN` goes in the PR description, not the title.
   - A breaking change gets `!`.

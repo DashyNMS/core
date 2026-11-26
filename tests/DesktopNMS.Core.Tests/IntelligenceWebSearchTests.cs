@@ -174,6 +174,19 @@ public sealed class IntelligenceWebSearchTests
         Assert.DoesNotContain("{scope}", full, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void An_unsupported_provider_explains_its_limitation_independently_of_settings(bool webSearchEnabled)
+    {
+        var instructions = IntelligenceInstructions.Build(null, null, webSearchEnabled, personality: null, webSearchSupported: false);
+
+        Assert.Contains("Web search isn't available through this provider in DashyNMS.", instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("Web search is disabled in Settings.", instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("never include private device names", instructions, StringComparison.Ordinal);
+        Assert.Contains("rather than answering from memory", instructions, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_instructions_carry_the_house_style_readings_and_diagnosis()
     {

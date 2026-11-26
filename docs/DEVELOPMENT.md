@@ -53,7 +53,7 @@ The tag has to match `<Version>` in `Directory.Build.props`. Don't create the re
 If it fails there's no release:
 
 - **Nothing on `main` has to change:** run **Release build** by hand with the tag. The package, if it was already pushed from that commit, is kept after its provenance is checked.
-- **It needs a fix:** the tag has to be on `main`'s newest commit, so merge the fix, delete the tag (`git push --delete origin v2.0.0`) and push it again. If the package was already pushed, that version is used up: raise `<Version>` first.
+- **It needs a fix:** the tag has to be on `main`'s newest commit, so merge the fix, then move the tag: `git push --delete origin v2.0.0`, `git fetch origin`, `git tag -f v2.0.0 origin/main` and `git push origin v2.0.0`. If the package was already pushed, that version is used up: raise `<Version>` first.
 
 ### Release notes
 
@@ -72,7 +72,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 | Build | Notes |
 | --- | --- |
 | CI | fails if the file is missing, empty or has other headings |
-| Edge | none: the package, or the rolling release, points at its commit |
+| Edge | a tag and prerelease with links to the file and to the changes since the last edge build |
 | Nightly | a tag and prerelease with a copy of the file, and a link to the changes since the last build |
 | Release | the last step creates the release with the file as its notes |
 
@@ -83,7 +83,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 The same standard as every DashyNMS repository: `type(scope): what changes, in plain words`.
 
 - **Types:** `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
-- **Scopes:** `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`, `intelligence`.
+- **Scopes:** `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`, `intelligence`, `help`, `demo`.
 - **The description:** lower-case start, no full stop, under about 72 characters.
 - **Issues:** issue titles use the same form, worded as the result the fix delivers.
 - **PRs:** one issue per PR, squash-merged, with `Closes #NN` in the description.

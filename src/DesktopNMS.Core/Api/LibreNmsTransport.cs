@@ -164,7 +164,8 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
         _logger.LogInformation(
             "LibreNMS transport configured for {ApiBase}{Backup}",
             connection.ApiBase,
-            connection.BackupWebRoot is { } backup ? $" (backup address {backup}{(startOnBackup ? ", in use" : string.Empty)})" : string.Empty);
+            connection.Handler is not null ? " (answered in process, not over the network)"
+                : connection.BackupWebRoot is { } backup ? $" (backup address {backup}{(startOnBackup ? ", in use" : string.Empty)})" : string.Empty);
     }
 
     /// <summary>Switched to the backup address or back: a fresh client, so no pooled connection to the old address carries on being used.</summary>
@@ -188,6 +189,45 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
     }
 
     private void Install(LibreNmsConnection connection)
+    {
+        // A demo's connection answers in the same process (#119).
+        var create = connection.Handler;
+        HttpMessageHandler inner = create is not null ? create() : SocketsHandler(connection);
+        var onBackup = create is null && _failover.IsOnBackup && connection.BackupWebRoot is not null;
+        var dialBackupHost = onBackup && connection.BackupIsAnotherRoute;
+        var redirects = new SameServerRedirectHandler(inner);
+        var http = new HttpClient(redirects, disposeHandler: false)
+        {
+            BaseAddress = onBackup && !dialBackupHost ? connection.BackupApiBase : connection.ApiBase,
+            // Each request owns its timeout so slow sensor lists can have
+            // longer without changing concurrent interactive requests (#26).
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
+
+        http.DefaultRequestHeaders.Add(SameServerRedirectHandler.TokenHeader, connection.ApiToken);
+        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("DashyNMS/0.1 (+https://librenms.org)");
+
+        HttpClient? oldHttp;
+        HttpMessageHandler? oldHandler;
+
+        lock (_sync)
+        {
+            oldHttp = _http;
+            oldHandler = _handler;
+            _http = http;
+            _webBase = onBackup && !dialBackupHost ? connection.BackupWebRoot : connection.WebRoot;
+
+            // The outer handler: disposing it disposes the sockets handler too.
+            _handler = redirects;
+            _connection = connection;
+        }
+
+        oldHttp?.Dispose();
+        oldHandler?.Dispose();
+    }
+
+    private SocketsHttpHandler SocketsHandler(LibreNmsConnection connection)
     {
         // A plain HttpClientHandler leaves .NET's default pooled-connection
         // lifetime (effectively unbounded) in place. Many LibreNMS installs sit
@@ -249,37 +289,7 @@ public sealed class LibreNmsTransport : ILibreNmsTransport, IDisposable
                 details => _rejectedCertificate = onBackup ? details with { ReplacesTrustedCertificate = false } : details);
         }
 
-        var redirects = new SameServerRedirectHandler(handler);
-        var http = new HttpClient(redirects, disposeHandler: false)
-        {
-            BaseAddress = onBackup && !dialBackupHost ? connection.BackupApiBase : connection.ApiBase,
-            // Each request owns its timeout so slow sensor lists can have
-            // longer without changing concurrent interactive requests (#26).
-            Timeout = Timeout.InfiniteTimeSpan,
-        };
-
-        http.DefaultRequestHeaders.Add(SameServerRedirectHandler.TokenHeader, connection.ApiToken);
-        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("DashyNMS/0.1 (+https://librenms.org)");
-
-        HttpClient? oldHttp;
-        HttpMessageHandler? oldHandler;
-
-        lock (_sync)
-        {
-            oldHttp = _http;
-            oldHandler = _handler;
-            _http = http;
-            _webBase = onBackup && !dialBackupHost ? connection.BackupWebRoot : connection.WebRoot;
-
-            // The outer handler: disposing it disposes the sockets handler too.
-            _handler = redirects;
-            _connection = connection;
-        }
-
-        oldHttp?.Dispose();
-        oldHandler?.Dispose();
-
+        return handler;
     }
 
     /// <summary>Drops the current connection; subsequent calls fail as "not signed in".</summary>

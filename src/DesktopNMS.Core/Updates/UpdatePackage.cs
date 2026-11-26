@@ -26,7 +26,7 @@ public static class UpdatePackage
     public static GitHubReleaseAsset? FindForRuntime(GitHubRelease release, string runtime)
     {
         ArgumentNullException.ThrowIfNull(release);
-        var version = release.Version?.TrimStart('v');
+        var version = release.TagName?.TrimStart('v');
         if (string.IsNullOrWhiteSpace(version) || !Regex.IsMatch(version, @"^[0-9A-Za-z.\-]+$", RegexOptions.CultureInvariant)) return null;
         var name = runtime switch
         {
