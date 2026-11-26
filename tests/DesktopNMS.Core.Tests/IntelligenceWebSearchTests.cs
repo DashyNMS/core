@@ -183,6 +183,8 @@ public sealed class IntelligenceWebSearchTests
 
         Assert.Contains("Web search isn't available through this provider in DashyNMS.", instructions, StringComparison.Ordinal);
         Assert.DoesNotContain("Web search is disabled in Settings.", instructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("never include private device names", instructions, StringComparison.Ordinal);
+        Assert.Contains("rather than answering from memory", instructions, StringComparison.Ordinal);
     }
 
     [Fact]
