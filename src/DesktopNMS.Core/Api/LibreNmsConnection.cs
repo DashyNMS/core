@@ -34,13 +34,36 @@ public sealed class LibreNmsConnection
     /// <summary>SHA-256 fingerprints of the certificates the user has accepted for this server.</summary>
     public IReadOnlyCollection<string> TrustedCertificates { get; }
 
+    /// <summary>
+    /// Makes the handlers that answer this connection's requests in place of
+    /// the network, or null for the network (#119). A demo connects with one
+    /// over <see cref="Demo.DemoResponder"/>. It travels with the connection,
+    /// so every client built for it - the connection test's, and the one
+    /// rebuilt for a timeout, a trusted certificate or the backup address -
+    /// answers the same way, and a connection without it never does.
+    /// </summary>
+    /// <remarks>
+    /// Each call must return a new handler: the transport disposes the one it
+    /// used when it rebuilds its client. Certificate trust and the backup
+    /// address don't apply to it.
+    /// </remarks>
+    public Func<HttpMessageHandler>? Handler { get; private init; }
+
+    /// <summary>
+    /// The same connection, answered by handlers from <paramref name="create"/>;
+    /// see <see cref="Handler"/>. With a handler it has no backup address,
+    /// which the handler would answer for anyway.
+    /// </summary>
+    public LibreNmsConnection WithHandler(Func<HttpMessageHandler>? create)
+        => new(WebRoot, ApiToken, AllowUntrustedCertificate, TimeoutSeconds, create is null ? BackupWebRoot : null, TrustedCertificates) { Handler = create };
+
     /// <summary>The same connection, also trusting <paramref name="fingerprint"/>.</summary>
     public LibreNmsConnection WithTrustedCertificate(string fingerprint)
-        => new(WebRoot, ApiToken, AllowUntrustedCertificate, TimeoutSeconds, BackupWebRoot, TrustedCertificates.Append(fingerprint).ToArray());
+        => new(WebRoot, ApiToken, AllowUntrustedCertificate, TimeoutSeconds, BackupWebRoot, TrustedCertificates.Append(fingerprint).ToArray()) { Handler = Handler };
 
     /// <summary>The same connection with another request timeout.</summary>
     public LibreNmsConnection WithTimeout(int timeoutSeconds)
-        => new(WebRoot, ApiToken, AllowUntrustedCertificate, timeoutSeconds, BackupWebRoot, TrustedCertificates);
+        => new(WebRoot, ApiToken, AllowUntrustedCertificate, timeoutSeconds, BackupWebRoot, TrustedCertificates) { Handler = Handler };
 
     public int TimeoutSeconds { get; }
 
