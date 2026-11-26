@@ -22,3 +22,9 @@ updates:
     groups:
       packages:
         update-types: [minor, patch]
+    # Microsoft.Extensions majors follow the .NET runtime, and Core takes
+    # each target framework's own line (see DesktopNMS.Core.csproj). A new
+    # major arrives with a new target framework, not from Dependabot.
+    ignore:
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
