@@ -391,7 +391,7 @@ internal sealed partial class DemoFleet
         switch (parts[2])
         {
             case "ports" when parts.Length >= 5:
-                return Svg(_graphs.Traffic(width, height, Seed(device.Name + parts[3]), PortOf(device, parts[3])?.Load ?? 0.3));
+                return Graph(_graphs.Traffic(width, height, Seed(device.Name + parts[3]), PortOf(device, parts[3])?.Load ?? 0.3), query);
 
             case "ports":
                 return Collection("ports", _ports.Where(p => p.DeviceId == device.Id).Select(PortJson));
@@ -402,7 +402,7 @@ internal sealed partial class DemoFleet
             case "graphs" when parts.Length >= 6:
                 // One sensor's own graph: devices/{id}/graphs/health/{graph}/{sensor}.
                 var one = SensorsOf(device).Where(s => Prop(s, "sensor_id").ToString(CultureInfo.InvariantCulture) == parts[5]).ToList();
-                return Svg(_graphs.Sensors(width, height, Seed(device.Name + parts[5]), one.Select(s => (Descr(s), Current(s))).ToList()), legend: !(query.TryGetValue("legend", out var oneLegend) && oneLegend == "no"));
+                return Graph(_graphs.Sensors(width, height, Seed(device.Name + parts[5]), one.Select(s => (Descr(s), Current(s))).ToList()), query, legend: !(query.TryGetValue("legend", out var oneLegend) && oneLegend == "no"));
 
             case "graphs":
                 return Collection("graphs", new[]
@@ -459,20 +459,21 @@ internal sealed partial class DemoFleet
             case var sensorGraph when sensorGraph.StartsWith("device_", StringComparison.Ordinal)
                                       && SensorsOf(device, sensorGraph["device_".Length..]) is { Count: > 0 } classSensors:
                 // A sensor class's graph: a line per sensor, by description, as LibreNMS draws it.
-                return Svg(
+                return Graph(
                     _graphs.Sensors(width, height, Seed(device.Name + sensorGraph), classSensors.Select(s => (Descr(s), Current(s))).ToList()),
+                    query,
                     legend: !(query.TryGetValue("legend", out var sensorLegend) && sensorLegend == "no"));
 
             default:
                 // Anything else under a device, asked for a time range, is a graph, by name.
-                return Svg(parts[2] switch
+                return Graph(parts[2] switch
                 {
                     "device_bits" => _graphs.Traffic(width, height, Seed(device.Name), device.Load, TrafficNow(device)),
                     "device_processor" => _graphs.Percent(width, height, Seed(device.Name + "cpu"), device.Cpu),
                     "device_mempool" => _graphs.Percent(width, height, Seed(device.Name + "mem"), device.Memory),
                     "device_icmp_perf" => _graphs.Latency(width, height, Seed(device.Name + "ping")),
                     _ => _graphs.Percent(width, height, Seed(device.Name + parts[2]), 0.4),
-                }, legend: !(query.TryGetValue("legend", out var noLegend) && noLegend == "no"));
+                }, query, legend: !(query.TryGetValue("legend", out var noLegend) && noLegend == "no"));
         }
     }
 
@@ -997,7 +998,22 @@ internal sealed partial class DemoFleet
     private static DemoResponse Fail(int status, string message)
         => new(JsonSerializer.Serialize(new { status = "error", message }, Json), Status: status);
 
-    private static DemoResponse Svg(string svg, bool legend = true) => new(legend ? svg : DemoGraphs.WithoutLegend(svg), "image/svg+xml");
+    /// <summary>
+    /// A graph as the request asks for it: the SVG desktop draws, or, for
+    /// <c>graph_type=png&amp;output=base64</c>, a PNG in LibreNMS's JSON envelope - the
+    /// form the Intelligence graph lookup asks for, so it can hand the image to a model.
+    /// </summary>
+    private static DemoResponse Graph(DemoChart chart, IReadOnlyDictionary<string, string> query, bool legend = true)
+    {
+        if (query.TryGetValue("graph_type", out var type) && type == "png" && query.TryGetValue("output", out var output) && output == "base64")
+        {
+            var image = new Dictionary<string, string> { ["image"] = Convert.ToBase64String(chart.ToPng(legend)), ["content-type"] = "image/png" };
+            return Ok(new Dictionary<string, object?> { ["image"] = image });
+        }
+
+        var svg = chart.ToSvg();
+        return new(legend ? svg : DemoGraphs.WithoutLegend(svg), "image/svg+xml");
+    }
 
     private sealed record ExampleDevice(int Id, string Name, string Ip, string Os, string Hardware, string Version, string Type, string Location, double Load, double Cpu, double Memory, bool Up, bool Disabled, string Serial);
 

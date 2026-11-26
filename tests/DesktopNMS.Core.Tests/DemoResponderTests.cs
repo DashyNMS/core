@@ -75,6 +75,37 @@ public sealed class DemoResponderTests : IDisposable
     }
 
     [Fact]
+    public void Graphs_asked_for_as_base64_png_come_in_librenms_envelope()
+    {
+        var path = $"/api/v0/devices/{_demo.FeaturedDeviceId}/device_bits?from=-1d&width=480&height=200&graph_type=png&output=base64";
+        var first = _demo.Respond("GET", path);
+        var again = _demo.Respond("GET", path);
+
+        Assert.Equal(200, first.Status);
+        Assert.Equal("application/json", first.ContentType);
+        Assert.Equal(first.Body, again.Body);
+        using var doc = JsonDocument.Parse(first.Body);
+        var image = doc.RootElement.GetProperty("image");
+        Assert.Equal("image/png", image.GetProperty("content-type").GetString());
+        var png = Convert.FromBase64String(image.GetProperty("image").GetString()!);
+        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, png[..8]);
+        Assert.Equal(480, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16)));
+        Assert.Equal(200, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20)));
+    }
+
+    [Fact]
+    public void A_png_graph_is_bounded_and_without_base64_stays_svg()
+    {
+        var huge = _demo.Respond("GET", "/api/v0/devices/1/device_processor?from=-1d&width=100000&height=100000&graph_type=png&output=base64");
+        using var doc = JsonDocument.Parse(huge.Body);
+        var png = Convert.FromBase64String(doc.RootElement.GetProperty("image").GetProperty("image").GetString()!);
+        Assert.Equal(2400, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16)));
+        Assert.Equal(1200, System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20)));
+
+        Assert.Equal("image/svg+xml", _demo.Respond("GET", "/api/v0/devices/1/device_processor?from=-1d&graph_type=png").ContentType);
+    }
+
+    [Fact]
     public async Task Network_search_finds_an_endpoint_and_the_address_two_macs_answer_for()
     {
         var search = new NetworkSearch(_client);
