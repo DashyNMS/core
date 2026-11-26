@@ -3,6 +3,12 @@
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <!-- Audit all restored dependencies; high/critical advisories and unavailable
+         vulnerability metadata must stop CI and publication restores. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>high</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1900;NU1903;NU1904;NU1905</WarningsAsErrors>
     <ImplicitUsings>enable</ImplicitUsings>
     <Product>DashyNMS</Product>
     <Company>DashyNMS</Company>

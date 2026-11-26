@@ -39,3 +39,9 @@ You're welcome to test Core under its licence for security problems, against you
 - how a particular LibreNMS server is set up or secured
 
 Known, open security issues are tracked publicly once it's safe to do so.
+
+## Repository checks
+
+[Repository standards](docs/REPOSITORY-STANDARDS.md) describes dependency audits,
+secret scanning, CodeQL analysis and publication gates. Passing a scan does not
+guarantee that no vulnerability exists. Report suspected vulnerabilities privately.

@@ -80,14 +80,21 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 
 ## Commits, pull requests and issues
 
+Dependabot uses `build(deps): ...` for every ecosystem. Its generated dependency names and grouped summaries may exceed the usual title length.
+
 The same standard as every DashyNMS repository: `type(scope): what changes, in plain words`.
 
 - **Types:** `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
-- **Scopes:** `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`, `intelligence`, `help`, `demo`.
+- **Scopes:** `api`, `alerting`, `rules`, `sensors`, `graphs`, `services`, `sign-in`, `settings`, `json`, `licences`, `intelligence`, `help`, `demo`, `deps`.
 - **The description:** lower-case start, no full stop, under about 72 characters.
 - **Issues:** issue titles use the same form, worded as the result the fix delivers.
-- **PRs:** one issue per PR, squash-merged, with `Closes #NN` in the description.
+- **PRs:** one issue per PR, squash-merged, with `Closes #NN` for completed work or `Refs #NN` for partial work in the description.
 - **Breaking changes:** add `!` after the type or scope.
 - **Release notes:** a change users would notice adds its line to `docs/releases/<version>.md` in the same PR. See [Release notes](#release-notes).
 
 Every PR says what desktop, mobile and MCP need to do about it.
+
+## Repository standards
+
+See [Repository standards](REPOSITORY-STANDARDS.md) for security gates, shared
+policy ownership, contribution files and the procedure for updating copied helpers.

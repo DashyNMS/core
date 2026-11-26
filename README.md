@@ -185,3 +185,11 @@ Building, the edge, nightly and release builds, and the commit standard are in [
 
 <sub>DashyNMS isn't affiliated with LibreNMS, Graylog or Unimus, which are trademarks of their respective owners.<br>
 MIT licence: see [LICENSE](LICENSE).</sub>
+
+
+## Contributing and accessibility
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for reports, proposed changes and validation,
+[ACCESSIBILITY.md](ACCESSIBILITY.md) for barriers and supported environments, and
+[the code of conduct](CODE_OF_CONDUCT.md) for community participation.
+Report vulnerabilities privately under [SECURITY.md](SECURITY.md).
