@@ -229,7 +229,11 @@ public sealed class DemoResponderTests : IDisposable
 
         Assert.All(answers, answer => Assert.Equal(200, answer.Status));
         Assert.Single(answers.Where((_, i) => i % 2 == 0).Select(a => a.Body).Distinct());
-        Assert.All(answers.Where((_, i) => i % 2 == 1), answer => Assert.Equal("image/svg+xml", answer.ContentType));
+        Assert.All(answers.Where((_, i) => i % 2 == 1), answer =>
+        {
+            Assert.Equal("image/svg+xml", answer.ContentType);
+            Assert.StartsWith("<svg", answer.Body, StringComparison.Ordinal);
+        });
         Assert.Single(answers.Where((_, i) => i % 2 == 1).Select(a => a.Body).Distinct());
     }
 
