@@ -4,10 +4,12 @@ name: CI
 # is published from a commit that hasn't passed. "CI result" is the required check.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   workflow_call:
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.run_id }}
@@ -48,10 +50,14 @@ jobs:
       - name: Check this version's release notes
         run: python3 scripts/build_version.py check
 
+  security:
+    name: Security
+    uses: ./.github/workflows/security.yml
+
   result:
     name: CI result
     if: always()
-    needs: [test, scripts]
+    needs: [test, scripts, security]
     runs-on: ubuntu-latest
     steps:
       # Only success counts: a job no runner ever took is neither a failure nor
