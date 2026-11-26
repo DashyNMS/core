@@ -34,6 +34,16 @@ public static class IntelligenceInstructions
     /// or null. Cleaned again here and placed below the rules, labelled as the user's.
     /// </param>
     public static string Build(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight, bool webSearchEnabled, string? personality)
+        => Build(detail, spotlight, webSearchEnabled, personality, webSearchSupported: true);
+
+    /// <summary>Builds instructions for a route whose web search capability may be limited by the provider.</summary>
+    /// <param name="detail">The reply detail level.</param>
+    /// <param name="spotlight">Objects already checked on this connection.</param>
+    /// <param name="webSearchEnabled">Whether the user enabled web search for this question.</param>
+    /// <param name="personality">The user's description of how to sound, if any.</param>
+    /// <param name="webSearchSupported">Whether the provider offers web search through this route.</param>
+    public static string Build(string? detail, IReadOnlyCollection<IntelligenceObjectReference>? spotlight,
+        bool webSearchEnabled, string? personality, bool webSearchSupported)
     {
         var blocks = new List<string>
         {
@@ -48,7 +58,13 @@ public static class IntelligenceInstructions
             blocks.Add(Block("spotlight").Replace("{scope}", scope, StringComparison.Ordinal));
         }
 
-        blocks.Add(Block(webSearchEnabled ? "web-search-on" : "web-search-off"));
+        var webSearchBlock = (webSearchSupported, webSearchEnabled) switch
+        {
+            (false, _) => "web-search-unavailable",
+            (true, true) => "web-search-on",
+            _ => "web-search-off",
+        };
+        blocks.Add(Block(webSearchBlock));
 
         // Last, so every rule comes before the user's text and the block can say so.
         if (IntelligencePersonality.Clean(personality) is { } voice)
