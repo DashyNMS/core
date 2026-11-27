@@ -80,7 +80,7 @@ Every DashyNMS repository writes its release notes the same way. **`docs/release
 
 ## Commits, pull requests and issues
 
-Dependabot uses `build(deps): ...` for every ecosystem. Its generated dependency names and grouped summaries may exceed the usual title length.
+Dependabot uses `build(deps): ...` for every ecosystem. Authenticated Dependabot may use generated capitalisation and exceed 72 characters.
 
 The same standard as every DashyNMS repository: `type(scope): what changes, in plain words`.
 
